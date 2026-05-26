@@ -31,10 +31,15 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
     max_tokens: opts.args.maxTokens,
     system: opts.args.system,
     temperature: opts.args.temperature,
+    stop_sequences: opts.args.stopSequences,
   };
 
   if (opts.args.debug) {
     debug("request", { ...requestOpts, messages: opts.messages.length });
+  }
+
+  if (opts.args.prefill) {
+    process.stdout.write(opts.args.prefill);
   }
 
   let response: Anthropic.Message;
@@ -54,12 +59,14 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
         }
         stream.on("text", (delta) => process.stdout.write(delta));
       },
+      opts.args.prefill,
     );
   } else {
     response = await addAssistantMessage(
       opts.client,
       opts.messages,
       requestOpts,
+      opts.args.prefill,
     );
   }
 

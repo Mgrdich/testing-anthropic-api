@@ -10,6 +10,8 @@ export type Args = {
   once: boolean;
   debug: boolean;
   stream: boolean;
+  prefill?: string;
+  stopSequences?: string[];
 };
 
 export function printHelp(): void {
@@ -28,6 +30,8 @@ Options:
   --once              Exit after the first reply (skip the REPL even in a TTY)
   --debug             Log request config and response metadata to stderr
   --stream            Stream the response, printing tokens as they arrive
+  --prefill <text>    Assistant prefill — model continues from this text
+  --stop <seq>        Stop sequence (repeatable, max 4 per API)
   -h, --help          Show this help
 
 Environment:
@@ -95,6 +99,18 @@ export function parseArgs(argv: readonly string[]): Args {
           );
         }
         out.temperature = n;
+        break;
+      }
+      case "--prefill": {
+        const v = argv[++i];
+        if (v === undefined) throw new Error("--prefill requires a value");
+        out.prefill = v;
+        break;
+      }
+      case "--stop": {
+        const v = argv[++i];
+        if (v === undefined) throw new Error("--stop requires a value");
+        (out.stopSequences ??= []).push(v);
         break;
       }
       default:

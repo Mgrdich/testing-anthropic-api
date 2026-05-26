@@ -16,19 +16,41 @@ export function addUserMessage(messages: MessageParam[], text: string): void {
   messages.push({ role: "user", content: text });
 }
 
+function withPrefill(
+  messages: MessageParam[],
+  prefill: string | undefined,
+): MessageParam[] {
+  return prefill
+    ? [...messages, { role: "assistant", content: prefill }]
+    : messages;
+}
+
+function mergePrefillIntoContent(
+  prefill: string,
+  content: Anthropic.Message["content"],
+): Anthropic.Message["content"] {
+  const first = content[0];
+  if (!first || first.type !== "text") return content;
+  return [{ ...first, text: prefill + first.text }, ...content.slice(1)];
+}
+
 export async function addAssistantMessage(
   client: Anthropic,
   messages: MessageParam[],
   opts: AddAssistantOptions = {},
+  prefill?: string,
 ): Promise<Anthropic.Message> {
   const response = await client.messages.create({
     model: DEFAULT_MODEL,
     max_tokens: DEFAULT_MAX_TOKENS,
     ...opts,
-    messages,
+    messages: withPrefill(messages, prefill),
   });
 
-  messages.push({ role: "assistant", content: response.content });
+  const merged = prefill
+    ? mergePrefillIntoContent(prefill, response.content)
+    : response.content;
+  messages.push({ role: "assistant", content: merged });
   return response;
 }
 
@@ -37,17 +59,21 @@ export async function streamAssistantMessage(
   messages: MessageParam[],
   opts: StreamAssistantOptions = {},
   onStream?: (stream: MessageStream) => void,
+  prefill?: string,
 ): Promise<Anthropic.Message> {
   const stream = client.messages.stream({
     model: DEFAULT_MODEL,
     max_tokens: DEFAULT_MAX_TOKENS,
     ...opts,
-    messages,
+    messages: withPrefill(messages, prefill),
   });
 
   onStream?.(stream);
 
   const finalMessage = await stream.finalMessage();
-  messages.push({ role: "assistant", content: finalMessage.content });
+  const merged = prefill
+    ? mergePrefillIntoContent(prefill, finalMessage.content)
+    : finalMessage.content;
+  messages.push({ role: "assistant", content: merged });
   return finalMessage;
 }
