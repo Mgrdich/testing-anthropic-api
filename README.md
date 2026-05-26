@@ -44,6 +44,9 @@ bun run dev --once "what is 2+2?"
 bun run dev --debug "hello"
 bun run dev --debug "hello" 2>debug.log    # separate stream into a file
 
+# stream the response token-by-token instead of waiting for the full reply
+bun run dev --stream "write me a short poem about debugging"
+
 # single-shot via stdin pipe (no REPL — exits after one reply)
 echo "summarize: hello world" | bun run dev
 
@@ -68,6 +71,7 @@ bun run start "hi" # runs the bundled output
 | `--temperature N`| (model default)     | Sampling temperature, `0`–`1`.                       |
 | `--once`         | off                 | Exit after the first reply (skip REPL even in TTY).  |
 | `--debug`        | off                 | Log request config + response metadata to stderr.    |
+| `--stream`       | off                 | Stream the response, printing tokens as they arrive. |
 | `--help`         | —                   | Print usage and exit.                                |
 
 ## Project layout
@@ -82,7 +86,7 @@ src/
 │   └── stdin.ts      # readStdin() for piped input
 └── core/             # Anthropic client + message orchestration
     ├── index.ts      # public barrel
-    ├── messages.ts   # addUserMessage, addAssistantMessage, MessageParam
+    ├── messages.ts   # addUserMessage, addAssistantMessage, streamAssistantMessage, MessageParam
     └── constants.ts  # DEFAULT_MODEL, DEFAULT_MAX_TOKENS
 ```
 

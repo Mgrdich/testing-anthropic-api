@@ -24,9 +24,14 @@ Two modules under `src/`:
 - **`cli/`** owns terminal concerns: arg parsing (`args.ts`), the readline
   conversation loop (`repl.ts`), piped stdin reading (`stdin.ts`), and the
   `runCli()` orchestrator (`index.ts`).
-- **`core/`** owns the Anthropic client surface: `addUserMessage` /
-  `addAssistantMessage` (`messages.ts`) and default model / max-tokens
-  (`constants.ts`). Re-exported from `core/index.ts`.
+- **`core/`** owns the Anthropic client surface: `addUserMessage`,
+  `addAssistantMessage`, and `streamAssistantMessage` (`messages.ts`), plus
+  default model / max-tokens (`constants.ts`). Re-exported from
+  `core/index.ts`. `streamAssistantMessage` uses the SDK's
+  `client.messages.stream()` helper and exposes an optional
+  `onTextDelta(delta)` callback; it appends the final assembled message to
+  the `messages` array, so history behaves identically to the non-streaming
+  path.
 
 `src/index.ts` is a 3-line entry that calls `runCli()`.
 

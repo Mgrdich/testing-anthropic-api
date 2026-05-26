@@ -3,6 +3,7 @@ import * as readline from "node:readline/promises";
 import {
   addAssistantMessage,
   addUserMessage,
+  streamAssistantMessage,
   type MessageParam,
 } from "@/core/index.ts";
 import type { Args } from "@/cli/args.ts";
@@ -32,11 +33,21 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
     debug("request", { ...requestOpts, messages: opts.messages.length });
   }
 
-  const response = await addAssistantMessage(
-    opts.client,
-    opts.messages,
-    requestOpts,
-  );
+  let response: Anthropic.Message;
+  if (opts.args.stream) {
+    response = await streamAssistantMessage(
+      opts.client,
+      opts.messages,
+      requestOpts,
+      (delta) => process.stdout.write(delta),
+    );
+  } else {
+    response = await addAssistantMessage(
+      opts.client,
+      opts.messages,
+      requestOpts,
+    );
+  }
 
   if (opts.args.debug) {
     debug("response", response);
@@ -45,7 +56,9 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
   const unhandled: typeof response.content = [];
   for (const block of response.content) {
     if (block.type === "text") {
-      process.stdout.write(block.text);
+      if (!opts.args.stream) {
+        process.stdout.write(block.text);
+      }
     } else {
       unhandled.push(block);
     }

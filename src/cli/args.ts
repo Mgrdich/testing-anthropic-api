@@ -9,6 +9,7 @@ export type Args = {
   help: boolean;
   once: boolean;
   debug: boolean;
+  stream: boolean;
 };
 
 export function printHelp(): void {
@@ -26,6 +27,7 @@ Options:
   --temperature <n>   Sampling temperature, 0 (deterministic) to 1 (creative)
   --once              Exit after the first reply (skip the REPL even in a TTY)
   --debug             Log request config and response metadata to stderr
+  --stream            Stream the response, printing tokens as they arrive
   -h, --help          Show this help
 
 Environment:
@@ -41,6 +43,7 @@ export function parseArgs(argv: readonly string[]): Args {
     help: false,
     once: false,
     debug: false,
+    stream: false,
   };
   const positional: string[] = [];
 
@@ -56,6 +59,9 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       case "--debug":
         out.debug = true;
+        break;
+      case "--stream":
+        out.stream = true;
         break;
       case "--model": {
         const v = argv[++i];
