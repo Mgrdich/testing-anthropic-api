@@ -84,8 +84,8 @@ type ReplOpts = {
 export async function runRepl(opts: ReplOpts): Promise<void> {
   process.stdout.write(
     opts.hadInitialTurn
-      ? "\n(conversational mode — empty line or 'exit' to quit)\n"
-      : "Conversational mode. Type your message; empty line or 'exit' to quit.\n",
+      ? "\n(conversational mode — empty line, 'exit', or 'quit' to leave)\n"
+      : "Conversational mode. Type your message; empty line, 'exit', or 'quit' to leave.\n",
   );
 
   const rl = readline.createInterface({
