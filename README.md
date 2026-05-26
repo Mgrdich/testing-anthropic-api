@@ -47,6 +47,15 @@ bun run dev --debug "hello" 2>debug.log    # separate stream into a file
 # stream the response token-by-token instead of waiting for the full reply
 bun run dev --stream "write me a short poem about debugging"
 
+# pin output shape with an assistant prefill (the model continues from this
+# text) and bound the output with --stop. NOTE: claude-sonnet-4-6 does NOT
+# support assistant prefill — use a prefill-capable model like haiku-4-5.
+bun run dev --model claude-haiku-4-5-20251001 \
+  --prefill '{' --stop '}' "give me a tiny JSON object about Paris"
+
+# --stop alone works on any model; repeat the flag for multiple stops (max 4)
+bun run dev --stop 'STOP' --stop 'END' "write a sentence then say STOP"
+
 # single-shot via stdin pipe (no REPL — exits after one reply)
 echo "summarize: hello world" | bun run dev
 
@@ -72,6 +81,8 @@ bun run start "hi" # runs the bundled output
 | `--once`         | off                 | Exit after the first reply (skip REPL even in TTY).  |
 | `--debug`        | off                 | Log request config + response metadata to stderr.    |
 | `--stream`       | off                 | Stream the response, printing tokens as they arrive. |
+| `--prefill <txt>`| (none)              | Assistant prefill — model continues from this text.  |
+| `--stop <seq>`   | (none)              | Stop sequence; repeat for multiple (max 4 per API).  |
 | `--help`         | —                   | Print usage and exit.                                |
 
 ## Project layout
