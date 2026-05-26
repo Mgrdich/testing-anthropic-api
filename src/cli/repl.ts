@@ -14,19 +14,51 @@ type TurnOpts = {
   text: string;
 };
 
+function debug(label: string, payload: unknown): void {
+  process.stderr.write(`[debug] ${label} ${JSON.stringify(payload, null, 2)}\n`);
+}
+
 export async function sendTurn(opts: TurnOpts): Promise<void> {
   addUserMessage(opts.messages, opts.text);
-  const response = await addAssistantMessage(opts.client, opts.messages, {
+
+  const requestOpts = {
     model: opts.args.model,
     max_tokens: opts.args.maxTokens,
     system: opts.args.system,
-  });
+    temperature: opts.args.temperature,
+  };
+
+  if (opts.args.debug) {
+    debug("request", { ...requestOpts, messages: opts.messages.length });
+  }
+
+  const response = await addAssistantMessage(
+    opts.client,
+    opts.messages,
+    requestOpts,
+  );
+
+  if (opts.args.debug) {
+    debug("response", response);
+  }
+
+  const unhandled: typeof response.content = [];
   for (const block of response.content) {
     if (block.type === "text") {
       process.stdout.write(block.text);
+    } else {
+      unhandled.push(block);
     }
   }
   process.stdout.write("\n");
+
+  // TODO will be handled later
+  if (unhandled.length > 0) {
+    const kinds = unhandled.map((b) => b.type).join(", ");
+    process.stderr.write(
+      `warning: ${unhandled.length} non-text block(s) not rendered: ${kinds}\n`,
+    );
+  }
 }
 
 type ReplOpts = {

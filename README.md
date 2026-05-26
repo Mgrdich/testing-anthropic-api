@@ -31,11 +31,18 @@ bun run dev --model claude-haiku-4-5-20251001
 # set a system prompt and max tokens
 bun run dev --system "You are terse." --max-tokens 256
 
+# tune sampling temperature (0 = deterministic, 1 = creative)
+bun run dev --temperature 0.2 "give me the same answer every time"
+
 # load a long system prompt from a file (see system-prompts/)
 bun run dev --system "$(cat system-prompts/math-tutor.txt)"
 
 # force single-shot in a terminal (skip the REPL, exit after one reply)
 bun run dev --once "what is 2+2?"
+
+# debug: dump request config + response usage to stderr (stdout stays clean)
+bun run dev --debug "hello"
+bun run dev --debug "hello" 2>debug.log    # separate stream into a file
 
 # single-shot via stdin pipe (no REPL — exits after one reply)
 echo "summarize: hello world" | bun run dev
@@ -58,7 +65,9 @@ bun run start "hi" # runs the bundled output
 | `--model <id>`   | `claude-sonnet-4-6` | Any Anthropic model id.                              |
 | `--system <txt>` | (none)              | System prompt.                                       |
 | `--max-tokens N` | `1024`              | Max tokens in the response.                          |
+| `--temperature N`| (model default)     | Sampling temperature, `0`–`1`.                       |
 | `--once`         | off                 | Exit after the first reply (skip REPL even in TTY).  |
+| `--debug`        | off                 | Log request config + response metadata to stderr.    |
 | `--help`         | —                   | Print usage and exit.                                |
 
 ## Project layout
