@@ -28,10 +28,11 @@ Two modules under `src/`:
   `addAssistantMessage`, and `streamAssistantMessage` (`messages.ts`), plus
   default model / max-tokens (`constants.ts`). Re-exported from
   `core/index.ts`. `streamAssistantMessage` uses the SDK's
-  `client.messages.stream()` helper and exposes an optional
-  `onTextDelta(delta)` callback; it appends the final assembled message to
-  the `messages` array, so history behaves identically to the non-streaming
-  path.
+  `client.messages.stream()` helper and hands the raw `MessageStream` to an
+  optional `onStream(stream)` callback so the caller can wire `.on("text",
+  …)`, `.on("streamEvent", …)`, etc.; it appends the final assembled message
+  to the `messages` array, so history behaves identically to the
+  non-streaming path.
 
 `src/index.ts` is a 3-line entry that calls `runCli()`.
 

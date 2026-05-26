@@ -15,8 +15,12 @@ type TurnOpts = {
   text: string;
 };
 
+const DEBUG_SEPARATOR = `${"-".repeat(60)}\n`;
+
 function debug(label: string, payload: unknown): void {
+  process.stderr.write(`\n${DEBUG_SEPARATOR}`);
   process.stderr.write(`[debug] ${label} ${JSON.stringify(payload, null, 2)}\n`);
+  process.stderr.write(DEBUG_SEPARATOR);
 }
 
 export async function sendTurn(opts: TurnOpts): Promise<void> {
@@ -39,7 +43,17 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
       opts.client,
       opts.messages,
       requestOpts,
-      (delta) => process.stdout.write(delta),
+      (stream) => {
+        if (opts.args.debug) {
+          stream.on("streamEvent", (event) => {
+            debug(`stream event ${event.type}`, event);
+          });
+          stream.on("error", (err) => {
+            debug("stream error", { message: String(err) });
+          });
+        }
+        stream.on("text", (delta) => process.stdout.write(delta));
+      },
     );
   } else {
     response = await addAssistantMessage(

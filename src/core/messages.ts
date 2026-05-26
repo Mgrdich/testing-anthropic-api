@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
 import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 
 export type MessageParam = Anthropic.MessageParam;
@@ -35,7 +36,7 @@ export async function streamAssistantMessage(
   client: Anthropic,
   messages: MessageParam[],
   opts: StreamAssistantOptions = {},
-  onTextDelta?: (delta: string) => void,
+  onStream?: (stream: MessageStream) => void,
 ): Promise<Anthropic.Message> {
   const stream = client.messages.stream({
     model: DEFAULT_MODEL,
@@ -44,9 +45,7 @@ export async function streamAssistantMessage(
     messages,
   });
 
-  if (onTextDelta) {
-    stream.on("text", (delta) => onTextDelta(delta));
-  }
+  onStream?.(stream);
 
   const finalMessage = await stream.finalMessage();
   messages.push({ role: "assistant", content: finalMessage.content });
