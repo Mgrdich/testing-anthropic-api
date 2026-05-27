@@ -125,7 +125,98 @@ Helpers re-exported from `@/eval/index.ts`:
 - `allChecks({ name: check, ... })` — combine N checks; score =
   `passing/total`; per-check breakdown in `details`.
 
-## Commands (cheat sheet)
+## Subcommands & flags
+
+CLI parsing is in `src/eval/cli.ts`. Required positional args fail
+loudly with the full `Usage:` block; flag values are validated where
+applicable (e.g. `--check` is parsed via `CheckTemplateSchema` —
+`z.enum(["json","zod","regex","none"])`).
+
+### `scaffold <name> [--check json|zod|regex|none]`
+
+Creates `evals/prompts/<name>/` with template files. No-ops on files
+that already exist — safe to re-run after manual edits without losing
+work.
+
+| Flag      | Values                                | Default | Effect                                                                 |
+|-----------|---------------------------------------|---------|------------------------------------------------------------------------|
+| `--check` | `json` \| `zod` \| `regex` \| `none`  | `none`  | Picks the starter `code-eval.ts` template (see below). `none` writes no code-eval. |
+
+Always written regardless of `--check`: `v1.txt`, `generate.txt`,
+`judge.txt`. Per-template `code-eval.ts` body:
+
+- **`json`** — `export const check = jsonCheck`. Score 1.0 if
+  `JSON.parse(output)` succeeds, 0.0 with the parse error in `reason`.
+- **`zod`** — `export const check = zodCheck(z.object({ /* TODO */ }))`.
+  Score 1.0 if output parses AND validates the schema; field-level
+  error messages land in `reason` and Zod issues in `details` on
+  failure. The starter schema has placeholder fields the user edits.
+- **`regex`** — `export const check = regexCheck`. Score 1.0 if
+  `new RegExp(output)` compiles, 0.0 otherwise.
+- **`none`** — file not written.
+
+Templates are starting points; the contract is just
+`(output, item) => CheckResult`, so the user can rewrite `check` to
+do anything deterministic.
+
+### `gen <name> [--count N] [--force]`
+
+Generates `evals/datasets/<name>.jsonl` using Haiku
+(`claude-haiku-4-5-20251001`, hardcoded). System prompt is the
+user's `generate.txt`; `{count}` placeholder is substituted. Uses
+prefill ` ```json\n[ ` and stop `]\n``` ` for structured output (see
+the TODO in `dataset.ts` for the eventual tool-use migration).
+
+| Flag      | Type    | Default | Effect                                                                                  |
+|-----------|---------|---------|-----------------------------------------------------------------------------------------|
+| `--count` | int > 0 | `10`    | Number of items to generate. Substituted into `{count}` placeholder of `generate.txt`.  |
+| `--force` | bool    | off     | Overwrite an existing dataset file. Without it, the command refuses to clobber.         |
+
+Items are validated against `DatasetItemSchema` (requires
+`input: string`); invalid items are dropped with a stderr warning
+rather than failing the whole batch.
+
+### `run <name> <version> [--model <id>]`
+
+Loads `evals/prompts/<name>/<version>.txt` as the system prompt and
+runs it against every dataset item sequentially. Writes
+`evals/results/<name>/<version>.runs.jsonl` preserving any custom
+fields from the dataset rows.
+
+| Flag      | Type   | Default                        | Effect                                       |
+|-----------|--------|--------------------------------|----------------------------------------------|
+| `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to run the prompt.   |
+
+### `code <name> <version>`
+
+Dynamic-imports `evals/prompts/<name>/code-eval.ts` (if present),
+applies its `check` to every runs row, and writes
+`evals/results/<name>/<version>.code.jsonl`. No flags.
+
+If `code-eval.ts` is missing, prints a skip message and exits 0
+(success — the code grader is optional). Each check return is
+validated against `CheckResultSchema`; thrown checks or malformed
+returns become `{ score: 0, reason: "...", error: true }` rows so one
+bad check never stops the batch. Summary prints avg score, perfect
+count, zero count, and error count.
+
+### `grade <name> <version> [--model <id>]`
+
+Runs the LLM-as-judge against every runs row using the user's
+`judge.txt` plus a fixed strict-JSON response footer. Writes
+`evals/results/<name>/<version>.graded.jsonl`.
+
+| Flag      | Type   | Default                        | Effect                                  |
+|-----------|--------|--------------------------------|-----------------------------------------|
+| `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to judge.       |
+
+Judge response is validated against `ModelGradeSchema` (score must be
+an integer in `[1, 5]`, `reasoning` non-empty). Malformed responses
+become `{ error, raw }` rows without crashing the batch. Summary
+prints average score, score histogram (`1:.. 2:.. 3:.. 4:.. 5:..`),
+error count, and the first few rationales.
+
+## Quick reference
 
 | Command                                          | What it does                      |
 |--------------------------------------------------|-----------------------------------|

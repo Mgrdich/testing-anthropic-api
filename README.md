@@ -85,25 +85,88 @@ bun run start "hi" # runs the bundled output
 | `--stop <seq>`   | (none)              | Stop sequence; repeat for multiple (max 4 per API).  |
 | `--help`         | —                   | Print usage and exit.                                |
 
+## Prompt evaluation workflow
+
+`bun run eval` exposes a minimal end-to-end loop for iterating on a
+prompt: scaffold a prompt directory, generate a dataset with Haiku,
+run a prompt version against the dataset, then grade with a code
+check, a model judge, or both. Artifacts live under `evals/` and are
+checked in so versions can be diffed.
+
+```bash
+# create evals/prompts/<name>/ with template files
+bun run eval scaffold answer-question
+bun run eval scaffold city-json --check zod
+
+# generate a dataset (Haiku)
+bun run eval gen answer-question --count 10
+
+# run a prompt version against the dataset
+bun run eval run answer-question v1
+
+# code grader (skipped if no code-eval.ts)
+bun run eval code city-json v1
+
+# LLM-as-judge grader
+bun run eval grade answer-question v1
+
+# iterate: write v2.txt, repeat run + grade
+```
+
+### Subcommands
+
+| Command                              | Flags                                            | What it does                       |
+|--------------------------------------|--------------------------------------------------|------------------------------------|
+| `eval scaffold <name>`               | `--check <json\|zod\|regex\|none>` (default `none`) | Create the prompt directory with template files. |
+| `eval gen <name>`                    | `--count <N>` (default `10`), `--force`          | Generate `evals/datasets/<name>.jsonl` using Haiku. `--force` overwrites. |
+| `eval run <name> <version>`          | `--model <id>` (default `claude-sonnet-4-6`)     | Run the prompt against the dataset; write `<version>.runs.jsonl`. |
+| `eval code <name> <version>`         | —                                                | Apply `code-eval.ts` to the runs; write `<version>.code.jsonl`. No-op if no `code-eval.ts`. |
+| `eval grade <name> <version>`        | `--model <id>` (default `claude-sonnet-4-6`)     | LLM-as-judge over the runs; write `<version>.graded.jsonl`. |
+
+### `--check` template values
+
+| Value   | Effect                                                                                           |
+|---------|--------------------------------------------------------------------------------------------------|
+| `none`  | No `code-eval.ts` written. Model grader only.                                                    |
+| `json`  | Starter checks `JSON.parse(output)`. Score 1.0 on success, 0.0 with the parse error.             |
+| `zod`   | Starter does `JSON.parse` + Zod schema validation. Edit the placeholder schema in `code-eval.ts`. |
+| `regex` | Starter checks `new RegExp(output)` compiles.                                                    |
+
+The starter is just a head start — `code-eval.ts` is a normal TS module
+with `export const check: CheckFn`, so it can be rewritten to do anything
+deterministic. See `src/eval/CLAUDE.md` for the full code-eval contract,
+the `CheckResult` schema, and helpers (`zodCheck`, `stripCodeFence`,
+`allChecks`).
+
 ## Project layout
 
 ```
 src/
 ├── index.ts          # thin entry → calls runCli()
-├── cli/              # terminal concerns
-│   ├── index.ts      # runCli(): args, env, client, initial turn, REPL
+├── cli/              # chat-CLI concerns
+│   ├── index.ts      # runCli(): args, env, initial turn, REPL
 │   ├── args.ts       # parseArgs, printHelp
 │   ├── repl.ts       # runRepl(), sendTurn() — the conversation loop
 │   └── stdin.ts      # readStdin() for piped input
-└── core/             # Anthropic client + message orchestration
-    ├── index.ts      # public barrel
-    ├── messages.ts   # addUserMessage, addAssistantMessage, streamAssistantMessage, MessageParam
-    └── constants.ts  # DEFAULT_MODEL, DEFAULT_MAX_TOKENS
+├── core/             # Anthropic client + message orchestration
+│   ├── index.ts      # public barrel
+│   ├── client.ts     # AnthropicClient singleton (init/get/reset)
+│   ├── messages.ts   # addUserMessage, addAssistantMessage, streamAssistantMessage, MessageParam
+│   ├── constants.ts  # DEFAULT_MODEL, DEFAULT_MAX_TOKENS
+│   └── util.ts       # errMsg helper
+└── eval/             # prompt evaluation module (`bun run eval`)
+    ├── CLAUDE.md     # workflow docs + code-eval contract
+    ├── index.ts      # public barrel — helper kit + types
+    ├── cli.ts        # subcommand dispatcher
+    ├── types.ts      # Zod schemas + inferred TS types
+    └── …             # paths, jsonl, scaffold, dataset, runner, graders, checks
 ```
 
-`cli/` is everything that's specific to being a terminal program. `core/` is
-the LLM-facing piece and is where future tool / MCP integrations will plug
-in, so they can be reused by non-CLI callers too.
+`cli/` is everything that's specific to being a terminal program. `core/`
+is the LLM-facing piece (singleton client + message helpers) and is where
+future tool / MCP integrations will plug in, so they can be reused by
+non-CLI callers too. `eval/` is the prompt-evaluation module on top of
+`core/`.
 
 ## Notes
 
