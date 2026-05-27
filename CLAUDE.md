@@ -32,7 +32,15 @@ Two modules under `src/`:
   optional `onStream(stream)` callback so the caller can wire `.on("text",
   …)`, `.on("streamEvent", …)`, etc.; it appends the final assembled message
   to the `messages` array, so history behaves identically to the
-  non-streaming path.
+  non-streaming path. Both `addAssistantMessage` and `streamAssistantMessage`
+  take an optional `prefill?: string` argument: when set, they send the
+  request with a trailing `{role:"assistant",content:prefill}` and merge the
+  prefill into the first text block of the response before pushing to
+  history, so the saved assistant turn matches what was printed. Stop
+  sequences need no new surface — they flow through `opts.stop_sequences`
+  via the existing `Partial<Omit<…>>` option types. Note: Claude Sonnet 4.6
+  currently rejects assistant prefill with a 400; use a prefill-capable
+  model (e.g., `claude-haiku-4-5-20251001`) when exercising that path.
 
 `src/index.ts` is a 3-line entry that calls `runCli()`.
 
