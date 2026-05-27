@@ -1,0 +1,149 @@
+import {
+  CheckTemplateSchema,
+  createPromptScaffold,
+  errMsg,
+  generateDataset,
+  gradeWithCode,
+  gradeWithModel,
+  runPromptOnDataset,
+} from "@/eval/index.ts";
+
+const USAGE = `Usage: bun run eval <subcommand> [args]
+
+Subcommands:
+  scaffold <name> [--check json|zod|regex|none]
+      Create evals/prompts/<name>/ with template files.
+      Default --check: none (no code-eval.ts).
+
+  gen <name> [--count N] [--force]
+      Generate evals/datasets/<name>.jsonl using Haiku.
+      Default --count: 10. --force overwrites existing dataset.
+
+  run <name> <version> [--model id]
+      Run the prompt against the dataset; write v<N>.runs.jsonl.
+      Default --model: project DEFAULT_MODEL.
+
+  code <name> <version>
+      Apply evals/prompts/<name>/code-eval.ts to v<N>.runs.jsonl;
+      write v<N>.code.jsonl. Skips if code-eval.ts is absent.
+
+  grade <name> <version> [--model id]
+      Run model-judge on v<N>.runs.jsonl; write v<N>.graded.jsonl.
+      Default --model: project DEFAULT_MODEL.
+`;
+
+function die(msg: string, code = 2): never {
+  process.stderr.write(`error: ${msg}\n\n${USAGE}`);
+  process.exit(code);
+}
+
+
+type Flags = {
+  positional: string[];
+  flags: Record<string, string | true>;
+};
+
+function parseArgs(argv: readonly string[]): Flags {
+  const out: Flags = { positional: [], flags: {} };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === undefined) continue;
+    if (a.startsWith("--")) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) {
+        out.flags[key] = true;
+      } else {
+        out.flags[key] = next;
+        i++;
+      }
+    } else {
+      out.positional.push(a);
+    }
+  }
+  return out;
+}
+
+function getString(flags: Flags["flags"], key: string): string | undefined {
+  const v = flags[key];
+  return typeof v === "string" ? v : undefined;
+}
+
+async function main(argv: readonly string[]): Promise<void> {
+  const sub = argv[0];
+  if (!sub || sub === "-h" || sub === "--help") {
+    process.stdout.write(USAGE);
+    return;
+  }
+
+  const { positional, flags } = parseArgs(argv.slice(1));
+
+  switch (sub) {
+    case "scaffold": {
+      const name = positional[0];
+      if (!name) die("scaffold requires <name>");
+      const checkRaw = getString(flags, "check") ?? "none";
+      const parsedCheck = CheckTemplateSchema.safeParse(checkRaw);
+      if (!parsedCheck.success) {
+        die(`--check must be one of json|zod|regex|none (got ${checkRaw})`);
+      }
+      const { wrote, skipped } = createPromptScaffold(name, {
+        check: parsedCheck.data,
+      });
+      for (const f of wrote) process.stdout.write(`wrote   ${f}\n`);
+      for (const f of skipped) process.stdout.write(`exists  ${f}\n`);
+      return;
+    }
+    case "gen": {
+      const name = positional[0];
+      if (!name) die("gen requires <name>");
+      const countRaw = getString(flags, "count") ?? "10";
+      const count = Number.parseInt(countRaw, 10);
+      if (!Number.isFinite(count) || count <= 0) {
+        die(`--count must be a positive integer (got ${countRaw})`);
+      }
+      const force = flags["force"] === true;
+      const result = await generateDataset({ name, count, force });
+      process.stdout.write(`wrote ${result.path} (${result.count} items)\n`);
+      return;
+    }
+    case "run": {
+      const name = positional[0];
+      const version = positional[1];
+      if (!name || !version) die("run requires <name> <version>");
+      const model = getString(flags, "model");
+      const result = await runPromptOnDataset({ name, version, model });
+      process.stdout.write(`wrote ${result.path} (${result.count} rows)\n`);
+      return;
+    }
+    case "code": {
+      const name = positional[0];
+      const version = positional[1];
+      if (!name || !version) die("code requires <name> <version>");
+      const result = await gradeWithCode({ name, version });
+      if (result === null) return;
+      process.stdout.write(
+        `wrote ${result.path} (${result.count} rows)\n${result.summary}\n`,
+      );
+      return;
+    }
+    case "grade": {
+      const name = positional[0];
+      const version = positional[1];
+      if (!name || !version) die("grade requires <name> <version>");
+      const model = getString(flags, "model");
+      const result = await gradeWithModel({ name, version, model });
+      process.stdout.write(
+        `wrote ${result.path} (${result.count} rows)\n${result.summary}\n`,
+      );
+      return;
+    }
+    default:
+      die(`unknown subcommand: ${sub}`);
+  }
+}
+
+main(process.argv.slice(2)).catch((err) => {
+  process.stderr.write(`error: ${errMsg(err)}\n`);
+  process.exit(1);
+});

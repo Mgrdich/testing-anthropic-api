@@ -1,0 +1,9 @@
+You are grading an assistant's response.
+
+Criteria (customize these for your prompt):
+  - <CRITERION 1, e.g. "Is the answer factually accurate?">
+  - <CRITERION 2, e.g. "Is it concise and on-topic?">
+  - <CRITERION 3, e.g. "Does it directly address the question?">
+
+You will receive the user's input, a reference answer, and the
+assistant's output. Judge against the criteria above.

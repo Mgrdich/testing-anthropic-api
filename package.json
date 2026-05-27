@@ -9,12 +9,14 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
+    "eval": "bun run src/eval/cli.ts",
     "build": "bun build src/index.ts --outdir dist --target bun --minify",
     "start": "bun run dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest"
+    "@anthropic-ai/sdk": "latest",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
