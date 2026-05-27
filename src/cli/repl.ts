@@ -9,7 +9,6 @@ import {
 import type { Args } from "@/cli/args.ts";
 
 type TurnOpts = {
-  client: Anthropic;
   messages: MessageParam[];
   args: Args;
   text: string;
@@ -45,7 +44,6 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
   let response: Anthropic.Message;
   if (opts.args.stream) {
     response = await streamAssistantMessage(
-      opts.client,
       opts.messages,
       requestOpts,
       (stream) => {
@@ -63,7 +61,6 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
     );
   } else {
     response = await addAssistantMessage(
-      opts.client,
       opts.messages,
       requestOpts,
       opts.args.prefill,
@@ -96,7 +93,6 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
 }
 
 type ReplOpts = {
-  client: Anthropic;
   messages: MessageParam[];
   args: Args;
   hadInitialTurn: boolean;
@@ -124,7 +120,6 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
       }
       if (!line || line === "exit" || line === "quit") break;
       await sendTurn({
-        client: opts.client,
         messages: opts.messages,
         args: opts.args,
         text: line,

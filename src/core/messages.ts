@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
+import { AnthropicClient } from "@/core/client.ts";
 import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 
 export type MessageParam = Anthropic.MessageParam;
@@ -35,12 +36,11 @@ function mergePrefillIntoContent(
 }
 
 export async function addAssistantMessage(
-  client: Anthropic,
   messages: MessageParam[],
   opts: AddAssistantOptions = {},
   prefill?: string,
 ): Promise<Anthropic.Message> {
-  const response = await client.messages.create({
+  const response = await AnthropicClient.get().messages.create({
     model: DEFAULT_MODEL,
     max_tokens: DEFAULT_MAX_TOKENS,
     ...opts,
@@ -55,13 +55,12 @@ export async function addAssistantMessage(
 }
 
 export async function streamAssistantMessage(
-  client: Anthropic,
   messages: MessageParam[],
   opts: StreamAssistantOptions = {},
   onStream?: (stream: MessageStream) => void,
   prefill?: string,
 ): Promise<Anthropic.Message> {
-  const stream = client.messages.stream({
+  const stream = AnthropicClient.get().messages.stream({
     model: DEFAULT_MODEL,
     max_tokens: DEFAULT_MAX_TOKENS,
     ...opts,
