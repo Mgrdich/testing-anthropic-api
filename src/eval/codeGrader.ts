@@ -10,7 +10,7 @@ import {
   type CheckFn,
   type CodeRow,
 } from "@/eval/types.ts";
-import { errMsg } from "@/eval/util.ts";
+import { errMsg } from "@/core/index.ts";
 
 const CodeEvalModuleSchema = z.object({
   check: z.custom<CheckFn>((val) => typeof val === "function", {

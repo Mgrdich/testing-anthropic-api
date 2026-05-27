@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { CheckFn, CheckResult, DatasetItem } from "@/eval/types.ts";
-import { errMsg } from "@/eval/util.ts";
+import { errMsg } from "@/core/index.ts";
 
 export function stripCodeFence(s: string): string {
   const trimmed = s.trim();

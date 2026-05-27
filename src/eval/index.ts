@@ -26,7 +26,6 @@ export { gradeWithCode } from "@/eval/codeGrader.ts";
 export { gradeWithModel } from "@/eval/modelGrader.ts";
 export { CheckTemplateSchema, createPromptScaffold } from "@/eval/scaffold.ts";
 export type { CheckTemplate } from "@/eval/scaffold.ts";
-export { errMsg } from "@/eval/util.ts";
 
 export { loadAuxPrompt, loadPromptVersion } from "@/eval/prompts.ts";
 export {

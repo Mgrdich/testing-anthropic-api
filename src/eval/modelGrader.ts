@@ -14,7 +14,7 @@ import {
   type GradedRow,
   type ModelGradeOrError,
 } from "@/eval/types.ts";
-import { errMsg } from "@/eval/util.ts";
+import { errMsg } from "@/core/index.ts";
 
 const FORMAT_FOOTER = `
 Respond with a single JSON object - no prose, no code fences - matching

@@ -1,4 +1,4 @@
-import { type MessageParam } from "@/core/index.ts";
+import { errMsg, type MessageParam } from "@/core/index.ts";
 import { type Args, parseArgs, printHelp } from "@/cli/args.ts";
 import { runRepl, sendTurn } from "@/cli/repl.ts";
 import { readStdin } from "@/cli/stdin.ts";
@@ -8,7 +8,7 @@ export async function runCli(): Promise<void> {
   try {
     args = parseArgs(process.argv.slice(2));
   } catch (err) {
-    process.stderr.write(`error: ${(err as Error).message}\n\n`);
+    process.stderr.write(`error: ${errMsg(err)}\n\n`);
     printHelp();
     process.exit(2);
   }

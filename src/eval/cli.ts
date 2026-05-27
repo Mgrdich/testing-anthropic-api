@@ -1,7 +1,7 @@
+import { errMsg } from "@/core/index.ts";
 import {
   CheckTemplateSchema,
   createPromptScaffold,
-  errMsg,
   generateDataset,
   gradeWithCode,
   gradeWithModel,
