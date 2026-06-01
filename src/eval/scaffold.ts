@@ -13,24 +13,67 @@ export type CheckTemplate = z.infer<typeof CheckTemplateSchema>;
 const V1_TEMPLATE = `You are a helpful assistant. Answer the user's question clearly and concisely.
 `;
 
-const GENERATE_TEMPLATE = `You are generating an evaluation dataset for a prompt that <DESCRIBE
-WHAT THE PROMPT UNDER TEST DOES>.
+const GENERATE_TEMPLATE = `You are generating an evaluation dataset.
 
-Produce a JSON array of {count} items. Each item must have:
-  - "input":     a realistic user question or request
-  - "reference": a concise gold answer (1-3 sentences)
+<prompt_under_test>
+TODO: describe what the prompt being evaluated does. Be specific
+about the domain, the input it takes, and the output it produces.
+</prompt_under_test>
 
-You may add any custom fields the grader needs (e.g. "allowed",
-"must_contain", "expected_schema"). Vary difficulty and topic.
-Respond with the JSON array only - no prose, no code fences.
+<input_style>
+TODO: customize if needed. The default works for general Q&A:
+
+Each "input" is a realistic short user question or request, 1-2
+sentences. Vary domain (science, history, geography, technology,
+everyday knowledge) and difficulty. Include at least one item that
+requires a multi-step reasoning step and one that is purely factual
+recall. Avoid trick questions or anything ambiguous.
+</input_style>
+
+<reference_style>
+TODO: customize if needed. The default works for general Q&A:
+
+Each "reference" is a concise gold answer, 1-2 sentences. Factual,
+directly addresses the question, no preamble like "Sure, ..." or
+"The answer is ...". Plain declarative tone.
+</reference_style>
+
+<custom_fields>
+TODO: list any extra fields your code-eval.ts or judge.txt expects on
+each item (e.g. "allowed", "must_contain", "max_chars"). Delete this
+block if you don't need any.
+</custom_fields>
+
+Produce a JSON array of {count} items. Each item must have at minimum:
+  - "input":     matching <input_style>
+  - "reference": matching <reference_style>
+  - plus any fields declared in <custom_fields>
+
+Vary difficulty and topic across items. Respond with the JSON array
+only - no prose, no code fences.
 `;
 
 const JUDGE_TEMPLATE = `You are grading an assistant's response.
 
-Criteria (customize these for your prompt):
-  - <CRITERION 1, e.g. "Is the answer factually accurate?">
-  - <CRITERION 2, e.g. "Is it concise and on-topic?">
-  - <CRITERION 3, e.g. "Does it directly address the question?">
+<prompt_under_test>
+TODO: describe what the prompt being graded was supposed to do.
+</prompt_under_test>
+
+<criteria>
+TODO: customize if needed. The default works for general Q&A:
+
+  - Is the answer factually accurate (consistent with the reference)?
+  - Is it concise (1-2 sentences) and on-topic?
+  - Does it directly address the question without preamble?
+</criteria>
+
+<scoring>
+TODO: customize if needed. The default works for general Q&A:
+
+  5 = correct, concise, direct
+  3-4 = correct but verbose or off-format
+  1-2 = wrong, off-topic, or missing key info
+</scoring>
 
 You will receive the user's input, a reference answer, and the
 assistant's output. Judge against the criteria above.

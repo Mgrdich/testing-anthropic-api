@@ -138,9 +138,9 @@ Creates `evals/prompts/<name>/` with template files. No-ops on files
 that already exist — safe to re-run after manual edits without losing
 work.
 
-| Flag      | Values                                | Default | Effect                                                                 |
-|-----------|---------------------------------------|---------|------------------------------------------------------------------------|
-| `--check` | `json` \| `zod` \| `regex` \| `none`  | `none`  | Picks the starter `code-eval.ts` template (see below). `none` writes no code-eval. |
+| Flag      | Values                               | Default | Effect                                                                             |
+|-----------|--------------------------------------|---------|------------------------------------------------------------------------------------|
+| `--check` | `json` \| `zod` \| `regex` \| `none` | `none`  | Picks the starter `code-eval.ts` template (see below). `none` writes no code-eval. |
 
 Always written regardless of `--check`: `v1.txt`, `generate.txt`,
 `judge.txt`. Per-template `code-eval.ts` body:
