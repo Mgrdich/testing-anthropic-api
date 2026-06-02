@@ -257,6 +257,17 @@ Without `--auto`, makes **no API calls** — pure read+join. Requires
 pass `--auto`). Cache-hit path uses mtime: combined is reused only
 if its file is newer than every input it would read.
 
+**Why mtime here and existence elsewhere?** combined is the only
+subcommand whose inputs are themselves tool outputs (`runs.jsonl`,
+`code.jsonl`, `graded.jsonl`). If `grade --force` rewrites graded
+after combined was last computed, a plain existence check would
+silently serve a stale join; mtime catches that. The other
+subcommands read user-authored inputs (the dataset, `<version>.txt`,
+`judge.txt`, `code-eval.ts`), so invalidation is human-triggered and
+the user passing `--force` is enough. Existence is fine when
+invalidation is human-triggered; mtime is required when invalidation
+is tool-triggered.
+
 Three valid input shapes:
 - both present → weighted average on 1-5
 - graded only (no `code-eval.ts` configured, or `code` not run) →

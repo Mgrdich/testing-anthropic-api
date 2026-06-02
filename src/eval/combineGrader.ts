@@ -161,6 +161,9 @@ function mtimeMs(p: string): number | null {
   return fs.statSync(p).mtimeMs;
 }
 
+// Mtime-based (not existence-based) because combined's inputs are
+// themselves cached tool outputs - an upstream `--force` rewrites them
+// and a plain existence check would silently serve a stale join.
 function isCombinedFresh(
   outPath: string,
   inputPaths: readonly string[],
