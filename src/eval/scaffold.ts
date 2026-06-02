@@ -67,6 +67,18 @@ TODO: customize if needed. The default works for general Q&A:
   - Does it directly address the question without preamble?
 </criteria>
 
+Score scale is fixed at integer 1-5 by the harness. Customize what
+each number means below; do not change the range.
+
+<reference_meaning>
+TODO: explain how the judge should use <reference>. Examples:
+  - Q&A: "<reference> is the gold answer. Output should match it."
+  - Hinter: "<reference> is the target answer. Hint must point
+    toward it without stating it."
+Note: <reference> is LLM-generated, treat as a strong example,
+not absolute ground truth.
+</reference_meaning>
+
 <scoring>
 TODO: customize if needed. The default works for general Q&A:
 
