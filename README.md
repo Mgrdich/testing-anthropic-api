@@ -123,7 +123,10 @@ bun run eval combined city-json v1 --markdown
 # one-shot: --auto runs any missing upstream artifacts first
 bun run eval combined city-json v1 --auto --markdown
 
-# iterate: write v2.txt, repeat run + grade [+ combined]
+# iterate: write v2.txt next to v1.txt (judge.txt, generate.txt,
+# code-eval.ts, and the dataset are shared across versions — only
+# <version>.txt and its *.jsonl outputs are per-version)
+bun run eval combined teacher-hinter v2 --auto --markdown
 ```
 
 ### Subcommands

@@ -297,6 +297,15 @@ prints avg combined, avg code, avg model, histogram, and error count.
   (Sonnet 4.6) and accept `--model` overrides.
 - Versioning is fully manual: user writes `v1.txt`, `v2.txt`, … by
   hand. Tooling takes the version as an argument; no auto-bump.
+- **What's shared vs per-version** — `generate.txt`, `judge.txt`,
+  `code-eval.ts`, and `evals/datasets/<name>.jsonl` are shared across
+  all versions of an eval. Only `<version>.txt` (the prompt under
+  test) and its derived artifacts under `evals/results/<name>/`
+  (`<version>.runs.jsonl`, `.code.jsonl`, `.graded.jsonl`,
+  `.combined.jsonl`, `.combined.md`) are version-specific. To iterate
+  on a prompt, write `v2.txt` next to `v1.txt` and re-run
+  `run` / `code` / `grade` / `combined` with the new version — same
+  rubric, same dataset, apples-to-apples comparison.
 - All Zod schemas + inferred types live in `types.ts`. Don't duplicate
   type-only definitions in feature files — `z.infer` from the schema.
 - Everything under `evals/` is checked in (prompts, datasets, results).
