@@ -94,11 +94,14 @@ and/or a model judge, then combine the scores into a single 1-5
 summary. Artifacts live under `evals/` and are checked in so versions
 can be diffed.
 
-**Caching contract:** `gen`, `run`, `code`, and `grade` all treat
-their output file as a cache — re-running with the same `<name>
-<version>` returns the prior result without API calls. `--force`
-busts the cache. `combined` makes no API calls regardless and has
-no `--force`; pass `--force` to the upstream commands instead.
+**Caching contract:** every API-calling subcommand (`gen`, `run`,
+`code`, `grade`) treats its output file as a cache — re-running
+with the same `<name> <version>` returns the prior result without
+API calls. `combined` uses mtime-aware caching: it short-circuits
+only if `<version>.combined.jsonl` is newer than every input file
+it would read, so re-running any upstream with `--force` naturally
+invalidates it. `--force` on any subcommand busts the cache
+unconditionally.
 
 ```bash
 # create evals/prompts/<name>/ with template files
@@ -138,7 +141,7 @@ bun run eval combined teacher-hinter v2 --auto --markdown
 | `eval run <name> <version>`            | `--model <id>` (default `claude-sonnet-4-6`), `--force`       | Run the prompt against the dataset; write `<version>.runs.jsonl`. Cached unless `--force`. |
 | `eval code <name> <version>`           | `--force`                                                     | Apply `code-eval.ts` to the runs; write `<version>.code.jsonl`. No-op if no `code-eval.ts`. Cached unless `--force`. |
 | `eval grade <name> <version>`          | `--model <id>` (default `claude-sonnet-4-6`), `--force`       | LLM-as-judge over the runs; write `<version>.graded.jsonl`. Cached unless `--force`. |
-| `eval combined <name> <version>`       | `--weights <c,m>` (default `0.5,0.5`), `--markdown`, `--auto` | Join `<version>.code.jsonl` and/or `<version>.graded.jsonl` into a single 1-5 score; write `<version>.combined.jsonl` (+ `.md` with `--markdown`). `--auto` bootstraps missing upstream artifacts (`run`, `code`, `grade`) before combining. Without `--auto`, no API calls. |
+| `eval combined <name> <version>`       | `--weights <c,m>` (default `0.5,0.5`), `--markdown`, `--auto`, `--force` | Join `<version>.code.jsonl` and/or `<version>.graded.jsonl` into a single 1-5 score; write `<version>.combined.jsonl` (+ `.md` with `--markdown`). `--auto` bootstraps missing upstream artifacts (`run`, `code`, `grade`) before combining. Cached when combined is newer than all its inputs; `--force` recomputes. Without `--auto`, no API calls. |
 
 ### `--check` template values
 

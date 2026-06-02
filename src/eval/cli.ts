@@ -35,7 +35,7 @@ Subcommands:
       Default --model: project DEFAULT_MODEL.
       Cached if v<N>.graded.jsonl exists; --force overwrites.
 
-  combined <name> <version> [--weights c,m] [--markdown] [--auto]
+  combined <name> <version> [--weights c,m] [--markdown] [--auto] [--force]
       Join v<N>.code.jsonl (if present) + v<N>.graded.jsonl; write
       v<N>.combined.jsonl with a per-row combined score on the 1-5
       scale (code remapped via 1 + 4*code). Requires at least one of
@@ -43,8 +43,9 @@ Subcommands:
       Default --weights: 0.5,0.5 (code,model).
       --markdown also writes v<N>.combined.md (summary only).
       --auto runs any missing upstream artifacts first (run, code if
-      code-eval.ts exists, grade if judge.txt exists). Caching keeps
-      repeat calls cheap.
+      code-eval.ts exists, grade if judge.txt exists).
+      Cached if v<N>.combined.jsonl is newer than its inputs (runs,
+      code, graded); --force recomputes regardless.
 `;
 
 function die(msg: string, code = 2): never {
@@ -187,12 +188,14 @@ async function main(argv: readonly string[]): Promise<void> {
       }
       const markdown = flags["markdown"] === true;
       const auto = flags["auto"] === true;
-      const result = await combineGrader({ name, version, weights, markdown, auto });
+      const force = flags["force"] === true;
+      const result = await combineGrader({ name, version, weights, markdown, auto, force });
+      const verb = result.cached ? "cached" : "wrote";
       process.stdout.write(
-        `wrote ${result.path} (${result.count} rows)\n${result.summary}\n`,
+        `${verb} ${result.path} (${result.count} rows)\n${result.summary}\n`,
       );
       if (result.mdPath) {
-        process.stdout.write(`wrote ${result.mdPath}\n`);
+        process.stdout.write(`${verb} ${result.mdPath}\n`);
       }
       return;
     }

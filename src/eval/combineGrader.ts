@@ -156,22 +156,43 @@ function parseRowsFromFile<T>(
   return readJsonl(filePath).map((row, i) => parse(row, i));
 }
 
+function mtimeMs(p: string): number | null {
+  if (!fs.existsSync(p)) return null;
+  return fs.statSync(p).mtimeMs;
+}
+
+function isCombinedFresh(
+  outPath: string,
+  inputPaths: readonly string[],
+): boolean {
+  const outMtime = mtimeMs(outPath);
+  if (outMtime === null) return false;
+  for (const p of inputPaths) {
+    const m = mtimeMs(p);
+    if (m !== null && m > outMtime) return false;
+  }
+  return true;
+}
+
 export async function combineGrader(opts: {
   name: string;
   version: string;
   weights?: CombineWeights;
   markdown?: boolean;
   auto?: boolean;
+  force?: boolean;
 }): Promise<{
   path: string;
   mdPath?: string;
   count: number;
   summary: string;
+  cached: boolean;
 }> {
   const weights = opts.weights ?? { code: 0.5, model: 0.5 };
   const rPath = runsPath(opts.name, opts.version);
   const gPath = gradedPath(opts.name, opts.version);
   const cPath = codePath(opts.name, opts.version);
+  const outPath = combinedPath(opts.name, opts.version);
 
   if (opts.auto) {
     if (!fs.existsSync(rPath)) {
@@ -195,6 +216,38 @@ export async function combineGrader(opts: {
     throw new Error(
       `no graded or code results for ${opts.name}/${opts.version} - run \`bun run eval grade\` and/or \`bun run eval code\` first (or pass --auto)`,
     );
+  }
+
+  if (!opts.force && isCombinedFresh(outPath, [rPath, cPath, gPath])) {
+    const cachedRows = parseRowsFromFile(outPath, (row, i) => {
+      const r = CombinedRowSchema.safeParse(row);
+      if (!r.success) {
+        throw new Error(`cached combined row ${i} invalid: ${r.error.message}`);
+      }
+      return r.data;
+    });
+    process.stderr.write(
+      `[combined] cache hit: ${outPath} (${cachedRows.length} rows; --force to recompute)\n`,
+    );
+    const s = summarize(cachedRows);
+    const summary = formatSummary(s);
+    let mdPath: string | undefined;
+    if (opts.markdown) {
+      mdPath = combinedMarkdownPath(opts.name, opts.version);
+      if (!isCombinedFresh(mdPath, [outPath])) {
+        fs.writeFileSync(
+          mdPath,
+          renderMarkdown(opts.name, opts.version, weights, s),
+        );
+      }
+    }
+    return {
+      path: outPath,
+      count: cachedRows.length,
+      summary,
+      cached: true,
+      ...(mdPath ? { mdPath } : {}),
+    };
   }
 
   const runs: RunRow[] = parseRowsFromFile(
@@ -263,7 +316,6 @@ export async function combineGrader(opts: {
     combinedRows.push(checked.data);
   }
 
-  const outPath = combinedPath(opts.name, opts.version);
   writeJsonl(outPath, combinedRows);
 
   const s = summarize(combinedRows);
@@ -278,5 +330,11 @@ export async function combineGrader(opts: {
     );
   }
 
-  return { path: outPath, count: combinedRows.length, summary, ...(mdPath ? { mdPath } : {}) };
+  return {
+    path: outPath,
+    count: combinedRows.length,
+    summary,
+    cached: false,
+    ...(mdPath ? { mdPath } : {}),
+  };
 }

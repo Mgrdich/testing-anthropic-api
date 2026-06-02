@@ -49,12 +49,14 @@ flow below). This directory is the code that produces and consumes them.
                   iterate: write v2.txt, repeat
 ```
 
-**Caching contract.** `gen`, `run`, `code`, and `grade` all treat
-their output file as a cache. Re-running with the same `<name>
-<version>` short-circuits to a summary derived from the existing
-file unless `--force` is passed. `combined` has no `--force`
-because it does no API calls; re-run `run` / `code` / `grade` with
-`--force` to bust upstream caches.
+**Caching contract.** `gen`, `run`, `code`, `grade`, and `combined`
+all treat their output file as a cache. `gen` / `run` / `code` /
+`grade` short-circuit if their output file exists. `combined` is
+mtime-aware: it short-circuits only if `<version>.combined.jsonl` is
+newer than every input it would read (`runs.jsonl`, `code.jsonl`,
+`graded.jsonl`), so re-running any upstream with `--force` naturally
+invalidates the cached combined. `--force` on any of them
+unconditionally recomputes.
 
 ## Module layout
 
@@ -245,14 +247,15 @@ is re-derived from disk; no API calls. Summary prints average score,
 score histogram (`1:.. 2:.. 3:.. 4:.. 5:..`), error count, and the
 first few rationales.
 
-### `combined <name> <version> [--weights c,m] [--markdown] [--auto]`
+### `combined <name> <version> [--weights c,m] [--markdown] [--auto] [--force]`
 
 Joins whichever of `<version>.code.jsonl` and `<version>.graded.jsonl`
 are present, by row index, computes a per-row combined score on the
 **1-5 scale**, and writes `evals/results/<name>/<version>.combined.jsonl`.
 Without `--auto`, makes **no API calls** — pure read+join. Requires
 **at least one** of code or graded; errors if neither exists (or
-pass `--auto`).
+pass `--auto`). Cache-hit path uses mtime: combined is reused only
+if its file is newer than every input it would read.
 
 Three valid input shapes:
 - both present → weighted average on 1-5
@@ -266,6 +269,7 @@ Three valid input shapes:
 | `--weights`  | `c,m`  | `0.5,0.5`   | Weights for code and model components. Must sum to 1 (±1e-9). Rejects anything else.                  |
 | `--markdown` | bool   | off         | Also writes `<version>.combined.md` — summary-only report (avg, code/model component avgs, histogram). |
 | `--auto`     | bool   | off         | Before combining, run any missing upstream artifacts: `run` if `runs.jsonl` missing, `code` if `code-eval.ts` exists and `code.jsonl` missing, `grade` if `judge.txt` exists and `graded.jsonl` missing. Caches make repeats cheap. |
+| `--force`    | bool   | off         | Bypass the mtime cache and recompute combined unconditionally. |
 
 Per-row math:
 - code score `[0, 1]` is remapped to `[1, 5]` via `1 + 4 * code.score`
@@ -288,7 +292,7 @@ prints avg combined, avg code, avg model, histogram, and error count.
 | `bun run eval run <name> <vN> [--model id] [--force]`       | Run prompt against dataset        |
 | `bun run eval code <name> <vN> [--force]`                   | Run code grader (if configured)   |
 | `bun run eval grade <name> <vN> [--model id] [--force]`     | Run model grader (LLM-as-judge)   |
-| `bun run eval combined <name> <vN> [--weights c,m] [--markdown] [--auto]` | Join code+model; optional report; --auto bootstraps missing upstreams |
+| `bun run eval combined <name> <vN> [--weights c,m] [--markdown] [--auto] [--force]` | Join code+model; mtime-cached; --auto bootstraps missing upstreams |
 
 ## Conventions
 
