@@ -49,12 +49,12 @@ flow below). This directory is the code that produces and consumes them.
                   iterate: write v2.txt, repeat
 ```
 
-**Caching contract.** `code`, `grade`, and `combined` all treat their
-output file as a cache. Re-running with the same `<name> <version>`
-short-circuits to a summary derived from the existing file unless
-`--force` is passed (or, for `combined`, unless the inputs change —
-`combined` has no `--force` because it does no API calls; re-run
-`grade` / `code` with `--force` to bust upstream caches).
+**Caching contract.** `gen`, `run`, `code`, and `grade` all treat
+their output file as a cache. Re-running with the same `<name>
+<version>` short-circuits to a summary derived from the existing
+file unless `--force` is passed. `combined` has no `--force`
+because it does no API calls; re-run `run` / `code` / `grade` with
+`--force` to bust upstream caches.
 
 ## Module layout
 
@@ -190,16 +190,20 @@ Items are validated against `DatasetItemSchema` (requires
 `input: string`); invalid items are dropped with a stderr warning
 rather than failing the whole batch.
 
-### `run <name> <version> [--model <id>]`
+### `run <name> <version> [--model <id>] [--force]`
 
 Loads `evals/prompts/<name>/<version>.txt` as the system prompt and
 runs it against every dataset item sequentially. Writes
 `evals/results/<name>/<version>.runs.jsonl` preserving any custom
 fields from the dataset rows.
 
-| Flag      | Type   | Default                        | Effect                                       |
-|-----------|--------|--------------------------------|----------------------------------------------|
-| `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to run the prompt.   |
+| Flag      | Type   | Default                        | Effect                                                                                  |
+|-----------|--------|--------------------------------|-----------------------------------------------------------------------------------------|
+| `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to run the prompt.                                              |
+| `--force` | bool   | off                            | Re-run even if `<version>.runs.jsonl` already exists. Without it the file is the cache. |
+
+Cache-hit path mirrors `code` / `grade`: existing rows are read and
+validated against `RunRowSchema`; no API calls.
 
 ### `code <name> <version> [--force]`
 
@@ -281,7 +285,7 @@ prints avg combined, avg code, avg model, histogram, and error count.
 |--------------------------------------------------|-----------------------------------|
 | `bun run eval scaffold <name> [--check ...]`                | Create the prompt directory       |
 | `bun run eval gen <name> [--count N] [--force]`             | Generate dataset (Haiku)          |
-| `bun run eval run <name> <vN> [--model id]`                 | Run prompt against dataset        |
+| `bun run eval run <name> <vN> [--model id] [--force]`       | Run prompt against dataset        |
 | `bun run eval code <name> <vN> [--force]`                   | Run code grader (if configured)   |
 | `bun run eval grade <name> <vN> [--model id] [--force]`     | Run model grader (LLM-as-judge)   |
 | `bun run eval combined <name> <vN> [--weights c,m] [--markdown] [--auto]` | Join code+model; optional report; --auto bootstraps missing upstreams |

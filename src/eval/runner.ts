@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import {
   addAssistantMessage,
   addUserMessage,
@@ -7,13 +8,34 @@ import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 import { loadPromptVersion } from "@/eval/prompts.ts";
 import { datasetPath, runsPath } from "@/eval/paths.ts";
 import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
-import { DatasetItemSchema, type RunRow } from "@/eval/types.ts";
+import {
+  DatasetItemSchema,
+  RunRowSchema,
+  type RunRow,
+} from "@/eval/types.ts";
 
 export async function runPromptOnDataset(opts: {
   name: string;
   version: string;
   model?: string;
-}): Promise<{ path: string; count: number }> {
+  force?: boolean;
+}): Promise<{ path: string; count: number; cached: boolean }> {
+  const outPath = runsPath(opts.name, opts.version);
+
+  if (!opts.force && fs.existsSync(outPath)) {
+    const cached = readJsonl(outPath).map((row, i) => {
+      const result = RunRowSchema.safeParse(row);
+      if (!result.success) {
+        throw new Error(`cached runs row ${i} invalid: ${result.error.message}`);
+      }
+      return result.data;
+    });
+    process.stderr.write(
+      `[run] cache hit: ${outPath} (${cached.length} rows; --force to re-run)\n`,
+    );
+    return { path: outPath, count: cached.length, cached: true };
+  }
+
   const system = loadPromptVersion(opts.name, opts.version);
   const items = readJsonl(datasetPath(opts.name)).map((row, i) => {
     const result = DatasetItemSchema.safeParse(row);
@@ -39,7 +61,6 @@ export async function runPromptOnDataset(opts: {
     rows.push({ ...item, output });
   }
 
-  const outPath = runsPath(opts.name, opts.version);
   writeJsonl(outPath, rows);
-  return { path: outPath, count: rows.length };
+  return { path: outPath, count: rows.length, cached: false };
 }

@@ -20,9 +20,10 @@ Subcommands:
       Generate evals/datasets/<name>.jsonl using Haiku.
       Default --count: 10. --force overwrites existing dataset.
 
-  run <name> <version> [--model id]
+  run <name> <version> [--model id] [--force]
       Run the prompt against the dataset; write v<N>.runs.jsonl.
       Default --model: project DEFAULT_MODEL.
+      Cached if v<N>.runs.jsonl exists; --force overwrites.
 
   code <name> <version> [--force]
       Apply evals/prompts/<name>/code-eval.ts to v<N>.runs.jsonl;
@@ -126,8 +127,10 @@ async function main(argv: readonly string[]): Promise<void> {
       const version = positional[1];
       if (!name || !version) die("run requires <name> <version>");
       const model = getString(flags, "model");
-      const result = await runPromptOnDataset({ name, version, model });
-      process.stdout.write(`wrote ${result.path} (${result.count} rows)\n`);
+      const force = flags["force"] === true;
+      const result = await runPromptOnDataset({ name, version, model, force });
+      const verb = result.cached ? "cached" : "wrote";
+      process.stdout.write(`${verb} ${result.path} (${result.count} rows)\n`);
       return;
     }
     case "code": {
