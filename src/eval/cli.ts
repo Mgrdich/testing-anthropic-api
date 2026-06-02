@@ -1,6 +1,7 @@
 import { errMsg } from "@/core/index.ts";
 import {
   CheckTemplateSchema,
+  combineGrader,
   createPromptScaffold,
   generateDataset,
   gradeWithCode,
@@ -23,13 +24,26 @@ Subcommands:
       Run the prompt against the dataset; write v<N>.runs.jsonl.
       Default --model: project DEFAULT_MODEL.
 
-  code <name> <version>
+  code <name> <version> [--force]
       Apply evals/prompts/<name>/code-eval.ts to v<N>.runs.jsonl;
       write v<N>.code.jsonl. Skips if code-eval.ts is absent.
+      Cached if v<N>.code.jsonl exists; --force overwrites.
 
-  grade <name> <version> [--model id]
+  grade <name> <version> [--model id] [--force]
       Run model-judge on v<N>.runs.jsonl; write v<N>.graded.jsonl.
       Default --model: project DEFAULT_MODEL.
+      Cached if v<N>.graded.jsonl exists; --force overwrites.
+
+  combined <name> <version> [--weights c,m] [--markdown] [--auto]
+      Join v<N>.code.jsonl (if present) + v<N>.graded.jsonl; write
+      v<N>.combined.jsonl with a per-row combined score on the 1-5
+      scale (code remapped via 1 + 4*code). Requires at least one of
+      code or graded.
+      Default --weights: 0.5,0.5 (code,model).
+      --markdown also writes v<N>.combined.md (summary only).
+      --auto runs any missing upstream artifacts first (run, code if
+      code-eval.ts exists, grade if judge.txt exists). Caching keeps
+      repeat calls cheap.
 `;
 
 function die(msg: string, code = 2): never {
@@ -120,10 +134,12 @@ async function main(argv: readonly string[]): Promise<void> {
       const name = positional[0];
       const version = positional[1];
       if (!name || !version) die("code requires <name> <version>");
-      const result = await gradeWithCode({ name, version });
+      const force = flags["force"] === true;
+      const result = await gradeWithCode({ name, version, force });
       if (result === null) return;
+      const verb = result.cached ? "cached" : "wrote";
       process.stdout.write(
-        `wrote ${result.path} (${result.count} rows)\n${result.summary}\n`,
+        `${verb} ${result.path} (${result.count} rows)\n${result.summary}\n`,
       );
       return;
     }
@@ -132,10 +148,49 @@ async function main(argv: readonly string[]): Promise<void> {
       const version = positional[1];
       if (!name || !version) die("grade requires <name> <version>");
       const model = getString(flags, "model");
-      const result = await gradeWithModel({ name, version, model });
+      const force = flags["force"] === true;
+      const result = await gradeWithModel({ name, version, model, force });
+      const verb = result.cached ? "cached" : "wrote";
+      process.stdout.write(
+        `${verb} ${result.path} (${result.count} rows)\n${result.summary}\n`,
+      );
+      return;
+    }
+    case "combined": {
+      const name = positional[0];
+      const version = positional[1];
+      if (!name || !version) die("combined requires <name> <version>");
+      const weightsRaw = getString(flags, "weights");
+      let weights: { code: number; model: number } | undefined;
+      if (weightsRaw !== undefined) {
+        const parts = weightsRaw
+          .split(",")
+          .map((s) => Number.parseFloat(s.trim()));
+        const c = parts[0];
+        const m = parts[1];
+        if (
+          parts.length !== 2 ||
+          c === undefined ||
+          m === undefined ||
+          !Number.isFinite(c) ||
+          !Number.isFinite(m)
+        ) {
+          die(`--weights must be two comma-separated numbers (got ${weightsRaw})`);
+        }
+        if (Math.abs(c + m - 1) > 1e-9) {
+          die(`--weights must sum to 1 (got ${c} + ${m} = ${c + m})`);
+        }
+        weights = { code: c, model: m };
+      }
+      const markdown = flags["markdown"] === true;
+      const auto = flags["auto"] === true;
+      const result = await combineGrader({ name, version, weights, markdown, auto });
       process.stdout.write(
         `wrote ${result.path} (${result.count} rows)\n${result.summary}\n`,
       );
+      if (result.mdPath) {
+        process.stdout.write(`wrote ${result.mdPath}\n`);
+      }
       return;
     }
     default:

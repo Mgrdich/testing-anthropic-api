@@ -40,3 +40,11 @@ export function codePath(name: string, version: string): string {
 export function gradedPath(name: string, version: string): string {
   return path.join(resultsDir(name), `${version}.graded.jsonl`);
 }
+
+export function combinedPath(name: string, version: string): string {
+  return path.join(resultsDir(name), `${version}.combined.jsonl`);
+}
+
+export function combinedMarkdownPath(name: string, version: string): string {
+  return path.join(resultsDir(name), `${version}.combined.md`);
+}

@@ -40,8 +40,21 @@ flow below). This directory is the code that produces and consumes them.
                        │                    │
                        └──────────┬─────────┘
                                   ▼
+                  bun run eval combined <name> v1 [--markdown]
+                                  │
+                                  ▼
+                  v1.combined.jsonl  (+ v1.combined.md if --markdown)
+                                  │
+                                  ▼
                   iterate: write v2.txt, repeat
 ```
+
+**Caching contract.** `code`, `grade`, and `combined` all treat their
+output file as a cache. Re-running with the same `<name> <version>`
+short-circuits to a summary derived from the existing file unless
+`--force` is passed (or, for `combined`, unless the inputs change —
+`combined` has no `--force` because it does no API calls; re-run
+`grade` / `code` with `--force` to bust upstream caches).
 
 ## Module layout
 
@@ -58,7 +71,8 @@ src/eval/
 ├── dataset.ts      # generateDataset — HAIKU hardcoded
 ├── runner.ts       # runPromptOnDataset
 ├── codeGrader.ts   # gradeWithCode — dynamic-imports code-eval.ts
-└── modelGrader.ts  # gradeWithModel — LLM-as-judge
+├── modelGrader.ts  # gradeWithModel — LLM-as-judge
+└── combineGrader.ts # combineGrader — join code+model, optional markdown
 ```
 
 ## Use cases (what the code grader can be)
@@ -187,44 +201,90 @@ fields from the dataset rows.
 |-----------|--------|--------------------------------|----------------------------------------------|
 | `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to run the prompt.   |
 
-### `code <name> <version>`
+### `code <name> <version> [--force]`
 
 Dynamic-imports `evals/prompts/<name>/code-eval.ts` (if present),
 applies its `check` to every runs row, and writes
-`evals/results/<name>/<version>.code.jsonl`. No flags.
+`evals/results/<name>/<version>.code.jsonl`.
+
+| Flag      | Type | Default | Effect                                                                                    |
+|-----------|------|---------|-------------------------------------------------------------------------------------------|
+| `--force` | bool | off     | Re-run even if `<version>.code.jsonl` already exists. Without it the file is the cache.   |
 
 If `code-eval.ts` is missing, prints a skip message and exits 0
-(success — the code grader is optional). Each check return is
-validated against `CheckResultSchema`; thrown checks or malformed
-returns become `{ score: 0, reason: "...", error: true }` rows so one
-bad check never stops the batch. Summary prints avg score, perfect
-count, zero count, and error count.
+(success — the code grader is optional). Cache-hit path: if
+`<version>.code.jsonl` exists and `--force` is not set, the file is
+read, validated against `CodeRowSchema`, and the summary is derived
+from those rows; no `code-eval.ts` import, no per-row check call.
+Each check return is validated against `CheckResultSchema`; thrown
+checks or malformed returns become
+`{ score: 0, reason: "...", error: true }` rows so one bad check
+never stops the batch. Summary prints avg score, perfect count, zero
+count, and error count.
 
-### `grade <name> <version> [--model <id>]`
+### `grade <name> <version> [--model <id>] [--force]`
 
 Runs the LLM-as-judge against every runs row using the user's
 `judge.txt` plus a fixed strict-JSON response footer. Writes
 `evals/results/<name>/<version>.graded.jsonl`.
 
-| Flag      | Type   | Default                        | Effect                                  |
-|-----------|--------|--------------------------------|-----------------------------------------|
-| `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to judge.       |
+| Flag      | Type   | Default                        | Effect                                                                                  |
+|-----------|--------|--------------------------------|-----------------------------------------------------------------------------------------|
+| `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to judge.                                                       |
+| `--force` | bool   | off                            | Re-run even if `<version>.graded.jsonl` already exists. Without it the file is the cache. |
 
 Judge response is validated against `ModelGradeSchema` (score must be
 an integer in `[1, 5]`, `reasoning` non-empty). Malformed responses
-become `{ error, raw }` rows without crashing the batch. Summary
-prints average score, score histogram (`1:.. 2:.. 3:.. 4:.. 5:..`),
-error count, and the first few rationales.
+become `{ error, raw }` rows without crashing the batch. Cache-hit
+path mirrors `code`: existing rows are read+validated and the summary
+is re-derived from disk; no API calls. Summary prints average score,
+score histogram (`1:.. 2:.. 3:.. 4:.. 5:..`), error count, and the
+first few rationales.
+
+### `combined <name> <version> [--weights c,m] [--markdown] [--auto]`
+
+Joins whichever of `<version>.code.jsonl` and `<version>.graded.jsonl`
+are present, by row index, computes a per-row combined score on the
+**1-5 scale**, and writes `evals/results/<name>/<version>.combined.jsonl`.
+Without `--auto`, makes **no API calls** — pure read+join. Requires
+**at least one** of code or graded; errors if neither exists (or
+pass `--auto`).
+
+Three valid input shapes:
+- both present → weighted average on 1-5
+- graded only (no `code-eval.ts` configured, or `code` not run) →
+  combined = `model.score`
+- code only (deterministic check, judge skipped) →
+  combined = `1 + 4 * code.score`
+
+| Flag         | Type   | Default     | Effect                                                                                                |
+|--------------|--------|-------------|-------------------------------------------------------------------------------------------------------|
+| `--weights`  | `c,m`  | `0.5,0.5`   | Weights for code and model components. Must sum to 1 (±1e-9). Rejects anything else.                  |
+| `--markdown` | bool   | off         | Also writes `<version>.combined.md` — summary-only report (avg, code/model component avgs, histogram). |
+| `--auto`     | bool   | off         | Before combining, run any missing upstream artifacts: `run` if `runs.jsonl` missing, `code` if `code-eval.ts` exists and `code.jsonl` missing, `grade` if `judge.txt` exists and `graded.jsonl` missing. Caches make repeats cheap. |
+
+Per-row math:
+- code score `[0, 1]` is remapped to `[1, 5]` via `1 + 4 * code.score`
+- `combined = w_c * code_5 + w_m * model.score`
+- If `code` is missing → `combined = model.score`
+- If `model` errored → `combined = code_5`
+- If both errored → `combined: { error: "no valid scores" }` (row
+  excluded from averages + histogram)
+
+Combined rows are validated against `CombinedRowSchema`. Histogram
+buckets `combined` by `Math.floor`, clamped to `[1, 5]`. Summary
+prints avg combined, avg code, avg model, histogram, and error count.
 
 ## Quick reference
 
 | Command                                          | What it does                      |
 |--------------------------------------------------|-----------------------------------|
-| `bun run eval scaffold <name> [--check ...]`     | Create the prompt directory       |
-| `bun run eval gen <name> [--count N] [--force]`  | Generate dataset (Haiku)          |
-| `bun run eval run <name> <vN> [--model id]`      | Run prompt against dataset        |
-| `bun run eval code <name> <vN>`                  | Run code grader (if configured)   |
-| `bun run eval grade <name> <vN> [--model id]`    | Run model grader (LLM-as-judge)   |
+| `bun run eval scaffold <name> [--check ...]`                | Create the prompt directory       |
+| `bun run eval gen <name> [--count N] [--force]`             | Generate dataset (Haiku)          |
+| `bun run eval run <name> <vN> [--model id]`                 | Run prompt against dataset        |
+| `bun run eval code <name> <vN> [--force]`                   | Run code grader (if configured)   |
+| `bun run eval grade <name> <vN> [--model id] [--force]`     | Run model grader (LLM-as-judge)   |
+| `bun run eval combined <name> <vN> [--weights c,m] [--markdown] [--auto]` | Join code+model; optional report; --auto bootstraps missing upstreams |
 
 ## Conventions
 

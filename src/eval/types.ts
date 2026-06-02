@@ -59,3 +59,18 @@ export const GradedRowSchema = RunRowSchema.extend({
 });
 
 export type GradedRow = z.infer<typeof GradedRowSchema>;
+
+export const CombinedScoreSchema = z.union([
+  z.number(),
+  z.object({ error: z.string() }),
+]);
+
+export type CombinedScore = z.infer<typeof CombinedScoreSchema>;
+
+export const CombinedRowSchema = RunRowSchema.extend({
+  code: CheckResultWithError.optional(),
+  model: ModelGradeOrErrorSchema.optional(),
+  combined: CombinedScoreSchema,
+});
+
+export type CombinedRow = z.infer<typeof CombinedRowSchema>;

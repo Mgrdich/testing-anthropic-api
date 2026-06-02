@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import {
   addAssistantMessage,
   addUserMessage,
@@ -44,11 +45,68 @@ function summarizeIssues(
     .join("; ");
 }
 
+function summarizeGradedRows(rows: readonly GradedRow[]): string {
+  const histogram: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const sampleRationales: string[] = [];
+  let totalScore = 0;
+  let scored = 0;
+  let errors = 0;
+
+  for (const row of rows) {
+    if ("error" in row.model) {
+      errors++;
+      continue;
+    }
+    totalScore += row.model.score;
+    scored++;
+    histogram[row.model.score] = (histogram[row.model.score] ?? 0) + 1;
+    if (sampleRationales.length < 3) {
+      sampleRationales.push(
+        `  score ${row.model.score}: ${row.model.reasoning}`,
+      );
+    }
+  }
+
+  const avg = scored === 0 ? 0 : totalScore / scored;
+  const histLine = [1, 2, 3, 4, 5]
+    .map((s) => `${s}:${histogram[s] ?? 0}`)
+    .join(" ");
+  return [
+    `avg score: ${avg.toFixed(2)} (over ${scored}/${rows.length} valid rows)`,
+    `histogram: ${histLine}`,
+    `errors: ${errors}`,
+    "sample rationales:",
+    ...sampleRationales,
+  ].join("\n");
+}
+
 export async function gradeWithModel(opts: {
   name: string;
   version: string;
   model?: string;
-}): Promise<{ path: string; count: number; summary: string }> {
+  force?: boolean;
+}): Promise<{ path: string; count: number; summary: string; cached: boolean }> {
+  const outPath = gradedPath(opts.name, opts.version);
+
+  if (!opts.force && fs.existsSync(outPath)) {
+    const cached = readJsonl(outPath).map((row, i) => {
+      const result = GradedRowSchema.safeParse(row);
+      if (!result.success) {
+        throw new Error(`cached graded row ${i} invalid: ${result.error.message}`);
+      }
+      return result.data;
+    });
+    process.stderr.write(
+      `[grade] cache hit: ${outPath} (${cached.length} rows; --force to re-run)\n`,
+    );
+    return {
+      path: outPath,
+      count: cached.length,
+      summary: summarizeGradedRows(cached),
+      cached: true,
+    };
+  }
+
   const judgeBody = loadAuxPrompt(opts.name, "judge");
   const system = judgeBody + FORMAT_FOOTER;
   const model = opts.model ?? DEFAULT_MODEL;
@@ -62,11 +120,6 @@ export async function gradeWithModel(opts: {
   });
 
   const gradedRows: GradedRow[] = [];
-  const histogram: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  const sampleRationales: string[] = [];
-  let totalScore = 0;
-  let scored = 0;
-  let errors = 0;
 
   for (const [i, run] of runs.entries()) {
     process.stderr.write(`[grade] ${i + 1}/${runs.length}\n`);
@@ -92,28 +145,17 @@ export async function gradeWithModel(opts: {
       const validated = ModelGradeSchema.safeParse(parsed);
       if (validated.success) {
         modelResult = validated.data;
-        totalScore += validated.data.score;
-        scored++;
-        histogram[validated.data.score] =
-          (histogram[validated.data.score] ?? 0) + 1;
-        if (sampleRationales.length < 3) {
-          sampleRationales.push(
-            `  score ${validated.data.score}: ${validated.data.reasoning}`,
-          );
-        }
       } else {
         modelResult = {
           error: `malformed judge output: ${summarizeIssues(validated.error.issues)}`,
           raw,
         };
-        errors++;
       }
     } catch (e) {
       modelResult = {
         error: `parse failed: ${errMsg(e)}`,
         raw,
       };
-      errors++;
     }
 
     const row: GradedRow = { ...run, model: modelResult };
@@ -126,20 +168,11 @@ export async function gradeWithModel(opts: {
     gradedRows.push(checked.data);
   }
 
-  const outPath = gradedPath(opts.name, opts.version);
   writeJsonl(outPath, gradedRows);
-
-  const avg = scored === 0 ? 0 : totalScore / scored;
-  const histLine = [1, 2, 3, 4, 5]
-    .map((s) => `${s}:${histogram[s] ?? 0}`)
-    .join(" ");
-  const summary = [
-    `avg score: ${avg.toFixed(2)} (over ${scored}/${runs.length} valid rows)`,
-    `histogram: ${histLine}`,
-    `errors: ${errors}`,
-    "sample rationales:",
-    ...sampleRationales,
-  ].join("\n");
-
-  return { path: outPath, count: gradedRows.length, summary };
+  return {
+    path: outPath,
+    count: gradedRows.length,
+    summary: summarizeGradedRows(gradedRows),
+    cached: false,
+  };
 }

@@ -24,10 +24,51 @@ function summarizeZodIssues(issues: { path: PropertyKey[]; message: string }[]):
     .join("; ");
 }
 
+function summarizeCodeRows(rows: readonly CodeRow[]): string {
+  let perfect = 0;
+  let zero = 0;
+  let errors = 0;
+  let totalScore = 0;
+
+  for (const row of rows) {
+    totalScore += row.code.score;
+    if (row.code.score === 1) perfect++;
+    if (row.code.score === 0) zero++;
+    if (row.code.error === true) errors++;
+  }
+
+  const avg = rows.length === 0 ? 0 : totalScore / rows.length;
+  return `avg score: ${avg.toFixed(3)} | perfect: ${perfect}/${rows.length} | zero: ${zero}/${rows.length} | errors: ${errors}`;
+}
+
 export async function gradeWithCode(opts: {
   name: string;
   version: string;
-}): Promise<{ path: string; count: number; summary: string } | null> {
+  force?: boolean;
+}): Promise<
+  { path: string; count: number; summary: string; cached: boolean } | null
+> {
+  const outPath = codePath(opts.name, opts.version);
+
+  if (!opts.force && fs.existsSync(outPath)) {
+    const cached = readJsonl(outPath).map((row, i) => {
+      const result = CodeRowSchema.safeParse(row);
+      if (!result.success) {
+        throw new Error(`cached code row ${i} invalid: ${result.error.message}`);
+      }
+      return result.data;
+    });
+    process.stderr.write(
+      `[code] cache hit: ${outPath} (${cached.length} rows; --force to re-run)\n`,
+    );
+    return {
+      path: outPath,
+      count: cached.length,
+      summary: summarizeCodeRows(cached),
+      cached: true,
+    };
+  }
+
   const evalFile = codeEvalFile(opts.name);
   if (!fs.existsSync(evalFile)) {
     process.stderr.write(`no code-eval.ts at ${evalFile} - skipping\n`);
@@ -53,10 +94,6 @@ export async function gradeWithCode(opts: {
   });
 
   const codeRows: CodeRow[] = [];
-  let perfect = 0;
-  let zero = 0;
-  let errors = 0;
-  let totalScore = 0;
 
   for (const run of runs) {
     let raw: unknown;
@@ -99,17 +136,13 @@ export async function gradeWithCode(opts: {
       );
     }
     codeRows.push(checked.data);
-
-    totalScore += codeResult.score;
-    if (codeResult.score === 1) perfect++;
-    if (codeResult.score === 0) zero++;
-    if (wasError) errors++;
   }
 
-  const outPath = codePath(opts.name, opts.version);
   writeJsonl(outPath, codeRows);
-
-  const avg = runs.length === 0 ? 0 : totalScore / runs.length;
-  const summary = `avg score: ${avg.toFixed(3)} | perfect: ${perfect}/${runs.length} | zero: ${zero}/${runs.length} | errors: ${errors}`;
-  return { path: outPath, count: codeRows.length, summary };
+  return {
+    path: outPath,
+    count: codeRows.length,
+    summary: summarizeCodeRows(codeRows),
+    cached: false,
+  };
 }
