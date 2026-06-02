@@ -89,9 +89,15 @@ bun run start "hi" # runs the bundled output
 
 `bun run eval` exposes a minimal end-to-end loop for iterating on a
 prompt: scaffold a prompt directory, generate a dataset with Haiku,
-run a prompt version against the dataset, then grade with a code
-check, a model judge, or both. Artifacts live under `evals/` and are
-checked in so versions can be diffed.
+run a prompt version against the dataset, grade with a code check
+and/or a model judge, then combine the scores into a single 1-5
+summary. Artifacts live under `evals/` and are checked in so versions
+can be diffed.
+
+**Caching contract:** `code`, `grade`, and `combined` all treat their
+output file as a cache — re-running with the same `<name> <version>`
+returns the prior summary without API calls. `--force` busts the
+cache on `code` and `grade`. `combined` makes no API calls regardless.
 
 ```bash
 # create evals/prompts/<name>/ with template files
@@ -110,18 +116,25 @@ bun run eval code city-json v1
 # LLM-as-judge grader
 bun run eval grade answer-question v1
 
-# iterate: write v2.txt, repeat run + grade
+# combine code+model into one score; --markdown writes a summary report
+bun run eval combined city-json v1 --markdown
+
+# one-shot: --auto runs any missing upstream artifacts first
+bun run eval combined city-json v1 --auto --markdown
+
+# iterate: write v2.txt, repeat run + grade [+ combined]
 ```
 
 ### Subcommands
 
-| Command                              | Flags                                            | What it does                       |
-|--------------------------------------|--------------------------------------------------|------------------------------------|
-| `eval scaffold <name>`               | `--check <json\|zod\|regex\|none>` (default `none`) | Create the prompt directory with template files. |
-| `eval gen <name>`                    | `--count <N>` (default `10`), `--force`          | Generate `evals/datasets/<name>.jsonl` using Haiku. `--force` overwrites. |
-| `eval run <name> <version>`          | `--model <id>` (default `claude-sonnet-4-6`)     | Run the prompt against the dataset; write `<version>.runs.jsonl`. |
-| `eval code <name> <version>`         | —                                                | Apply `code-eval.ts` to the runs; write `<version>.code.jsonl`. No-op if no `code-eval.ts`. |
-| `eval grade <name> <version>`        | `--model <id>` (default `claude-sonnet-4-6`)     | LLM-as-judge over the runs; write `<version>.graded.jsonl`. |
+| Command                                | Flags                                                         | What it does                       |
+|----------------------------------------|---------------------------------------------------------------|------------------------------------|
+| `eval scaffold <name>`                 | `--check <json\|zod\|regex\|none>` (default `none`)           | Create the prompt directory with template files. |
+| `eval gen <name>`                      | `--count <N>` (default `10`), `--force`                       | Generate `evals/datasets/<name>.jsonl` using Haiku. `--force` overwrites. |
+| `eval run <name> <version>`            | `--model <id>` (default `claude-sonnet-4-6`)                  | Run the prompt against the dataset; write `<version>.runs.jsonl`. |
+| `eval code <name> <version>`           | `--force`                                                     | Apply `code-eval.ts` to the runs; write `<version>.code.jsonl`. No-op if no `code-eval.ts`. Cached unless `--force`. |
+| `eval grade <name> <version>`          | `--model <id>` (default `claude-sonnet-4-6`), `--force`       | LLM-as-judge over the runs; write `<version>.graded.jsonl`. Cached unless `--force`. |
+| `eval combined <name> <version>`       | `--weights <c,m>` (default `0.5,0.5`), `--markdown`, `--auto` | Join `<version>.code.jsonl` and/or `<version>.graded.jsonl` into a single 1-5 score; write `<version>.combined.jsonl` (+ `.md` with `--markdown`). `--auto` bootstraps missing upstream artifacts (`run`, `code`, `grade`) before combining. Without `--auto`, no API calls. |
 
 ### `--check` template values
 
