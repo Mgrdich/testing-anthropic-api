@@ -12,6 +12,9 @@ export type Args = {
   stream: boolean;
   prefill?: string;
   stopSequences?: string[];
+  tools?: "all" | string[];
+  maxIterations?: number;
+  runner?: "local" | "sdk";
 };
 
 export function printHelp(): void {
@@ -32,6 +35,15 @@ Options:
   --stream            Stream the response, printing tokens as they arrive
   --prefill <text>    Assistant prefill — model continues from this text
   --stop <seq>        Stop sequence (repeatable, max 4 per API)
+  --tools [names]     Enable tool-use. Bare flag enables all built-in tools
+                      (echo, get_time, calculator, get_weather); pass a
+                      comma-separated subset, e.g. --tools calculator,get_time
+  --max-iterations N  Cap the tool-use loop at N assistant turns (default:
+                      unbounded). When the cap is hit, the loop returns the
+                      last assistant message without dispatching its tools.
+  --runner <name>     Pick the tool-use loop: 'local' (default) uses our
+                      hand-rolled runAgenticTurn; 'sdk' uses Anthropic's
+                      client.beta.messages.toolRunner.
   -h, --help          Show this help
 
 Environment:
@@ -111,6 +123,46 @@ export function parseArgs(argv: readonly string[]): Args {
         const v = argv[++i];
         if (v === undefined) throw new Error("--stop requires a value");
         (out.stopSequences ??= []).push(v);
+        break;
+      }
+      case "--max-iterations": {
+        const v = argv[++i];
+        if (!v) throw new Error("--max-iterations requires a value");
+        const n = Number.parseInt(v, 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          throw new Error(`--max-iterations must be a positive integer (got ${v})`);
+        }
+        out.maxIterations = n;
+        break;
+      }
+      case "--runner": {
+        const v = argv[++i];
+        if (v !== "local" && v !== "sdk") {
+          throw new Error(`--runner must be 'local' or 'sdk' (got ${v ?? "<missing>"})`);
+        }
+        out.runner = v;
+        break;
+      }
+      case "--tools": {
+        // Only consume the next arg if it looks like a tool list (identifier
+        // chars + commas, no spaces). Otherwise --tools is bare and the next
+        // arg is the prompt, so `--tools "hello world"` does what you'd expect.
+        const next = argv[i + 1];
+        const looksLikeToolList =
+          next !== undefined && /^[a-zA-Z_][a-zA-Z0-9_,-]*$/.test(next);
+        if (!looksLikeToolList) {
+          out.tools = "all";
+        } else {
+          i++;
+          const list = next
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          if (list.length === 0) {
+            throw new Error("--tools list must contain at least one tool name");
+          }
+          out.tools = list;
+        }
         break;
       }
       default:

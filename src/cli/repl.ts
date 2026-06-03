@@ -3,7 +3,12 @@ import * as readline from "node:readline/promises";
 import {
   addAssistantMessage,
   addUserMessage,
+  MUTATING_TOOLS,
+  runAgenticTurn,
+  runAgenticTurnSdk,
+  selectTools,
   streamAssistantMessage,
+  type AgenticHooks,
   type MessageParam,
 } from "@/core/index.ts";
 import type { Args } from "@/cli/args.ts";
@@ -12,7 +17,71 @@ type TurnOpts = {
   messages: MessageParam[];
   args: Args;
   text: string;
+  rl?: readline.Interface;
 };
+
+const TOOL_RESULT_PREVIEW_MAX = 200;
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max)}…`;
+}
+
+function compactJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function buildAgenticHooks(
+  args: Args,
+  rl: readline.Interface | undefined,
+): AgenticHooks {
+  return {
+    onStream: (stream) => {
+      if (args.debug) {
+        stream.on("streamEvent", (event) => {
+          debug(`stream event ${event.type}`, event);
+        });
+        stream.on("error", (err) => {
+          debug("stream error", { message: String(err) });
+        });
+      }
+      stream.on("text", (delta) => process.stdout.write(delta));
+    },
+    onRound: (info) => {
+      if (args.debug) debug("agentic round", info);
+    },
+    onToolCall: (name, input) => {
+      process.stdout.write("\n");
+      process.stderr.write(`[tool] ${name}(${compactJson(input)})\n`);
+      if (args.debug) debug("tool call", { name, input });
+    },
+    onToolResult: (name, result, isError) => {
+      const sigil = isError ? "✗" : "→";
+      const shown = args.debug ? result : truncate(result, TOOL_RESULT_PREVIEW_MAX);
+      // Prefix with the tool name so concurrent results stay readable
+      // when multiple tools fire in one round.
+      process.stderr.write(`  ${sigil} ${name}: ${shown}\n`);
+      if (args.debug) debug("tool result", { name, result, isError });
+    },
+    isMutating: (name) => MUTATING_TOOLS.has(name),
+    approveMutating: async (name, input) => {
+      if (!rl) {
+        throw new Error(
+          `mutating tool '${name}' requires an interactive TTY for approval; not supported in --once / piped mode`,
+        );
+      }
+      const ans = (
+        await rl.question(`approve ${name}(${compactJson(input)})? [y/N] `)
+      )
+        .trim()
+        .toLowerCase();
+      return ans === "y" || ans === "yes";
+    },
+  };
+}
 
 const DEBUG_SEPARATOR = `${"-".repeat(60)}\n`;
 
@@ -34,7 +103,33 @@ export async function sendTurn(opts: TurnOpts): Promise<void> {
   };
 
   if (opts.args.debug) {
-    debug("request", { ...requestOpts, messages: opts.messages.length });
+    debug("request", {
+      ...requestOpts,
+      messages: opts.messages.length,
+      tools: opts.args.tools,
+    });
+  }
+
+  if (opts.args.tools) {
+    const tools = selectTools(opts.args.tools);
+    const hooks = buildAgenticHooks(opts.args, opts.rl);
+    const runner = opts.args.runner === "sdk" ? runAgenticTurnSdk : runAgenticTurn;
+    const finalResponse = await runner(
+      opts.messages,
+      { ...requestOpts, max_iterations: opts.args.maxIterations },
+      tools,
+      hooks,
+    );
+    if (opts.args.debug) debug("final response", finalResponse);
+    process.stdout.write("\n");
+    if (finalResponse.stop_reason === "tool_use") {
+      // runAgenticTurn returns a tool_use response only when the
+      // max_iterations cap fires — the model still wanted to call more tools.
+      process.stderr.write(
+        `warning: --max-iterations cap (${opts.args.maxIterations}) reached; model still wanted to call tools\n`,
+      );
+    }
+    return;
   }
 
   if (opts.args.prefill) {
@@ -123,6 +218,7 @@ export async function runRepl(opts: ReplOpts): Promise<void> {
         messages: opts.messages,
         args: opts.args,
         text: line,
+        rl,
       });
     }
   } finally {

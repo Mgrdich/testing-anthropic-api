@@ -59,9 +59,52 @@ The `messages` array is the conversation's source of truth — both
 context across turns (future tool-use loops, etc.) should plug in via this
 array inside `core/`, not in `cli/`.
 
-Tools and MCP integration are planned but not yet scaffolded — they belong
-in `core/` (or sibling `tools/` / `mcp/` modules consumed by `core/`) so
-they can be reused by non-CLI callers.
+### Tools (`src/core/tools/`)
+
+Anthropic tool-use lives in `core/tools/` as a self-contained module:
+`types.ts` defines `Tool` as `BetaTool & { run, parse? }` (where
+`BetaTool` comes from `@anthropic-ai/sdk/resources/beta` — the variant
+`betaZodTool` produces);
+`define.ts` exports `defineTool`, a thin wrapper around the SDK's
+`betaZodTool` (from `@anthropic-ai/sdk/helpers/beta/zod`) that derives
+JSON `input_schema` from a Zod schema and returns both `run` and a
+`parse` function the executor uses to validate the model's input.
+Each shipped tool lives in its own file (`echo.ts`, `get_time.ts`,
+`calculator.ts`, `get_weather.ts` — all non-mutating, demo-only) and
+is built with `defineTool`. `builtins.ts` imports them and exposes the
+`BUILTIN_TOOLS` registry, `selectTools(filter)`, and the
+`MUTATING_TOOLS` name set (a sidecar that flags side-effecting tools
+since `betaZodTool`'s return type doesn't carry a `mutating` flag).
+`agentic.ts` exports `runAgenticTurn`, which wraps
+`streamAssistantMessage` in a `stop_reason === "tool_use"` loop and
+runs each call as `parse → run → catch` (matching the SDK's own
+`runRunnableTool`). Within a round, tool dispatch happens in two
+phases: serial `approveMutating` prompts (y/N can't interleave) then
+parallel `Promise.all` execution. The loop accepts a
+`max_iterations` cap (matching the SDK's `toolRunner` semantics); when
+hit, it returns the last assistant message with
+`stop_reason === "tool_use"` so callers can detect the cap fired. A
+second runner, `runAgenticTurnSdk` in `agentic_sdk.ts`, is the
+SDK-backed alternative (calls `client.beta.messages.toolRunner()`);
+the REPL picks between them via `--runner local|sdk` (default
+`local`).
+Tools listed in `MUTATING_TOOLS` are gated through
+`hooks.approveMutating` (y/N prompt in the REPL); the one-shot/piped
+path throws because no TTY is available.
+
+The CLI opts in via `--tools` (bare = all built-ins) or
+`--tools name1,name2` (subset). The tools path always streams (no
+`--stream` flag needed) and ignores `--prefill`. When `--tools` is
+unset, `sendTurn` calls the existing single-shot primitives unchanged.
+
+With `--debug`, the agentic loop emits framed `[debug] agentic round`,
+`[debug] tool call`, and `[debug] tool result` payloads to stderr in
+addition to the existing `stream event` frames (which include
+`input_json_delta` for tool inputs as they're built up).
+
+MCP integration is still planned but not yet scaffolded — same shape:
+belongs in `core/` (likely a sibling `mcp/` module) so it can be reused
+by non-CLI callers.
 
 ## TypeScript conventions enforced by `tsconfig.json`
 

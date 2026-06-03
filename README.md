@@ -56,6 +56,20 @@ bun run dev --model claude-haiku-4-5-20251001 \
 # --stop alone works on any model; repeat the flag for multiple stops (max 4)
 bun run dev --stop 'STOP' --stop 'END' "write a sentence then say STOP"
 
+# enable tool-use (all built-in demo tools)
+bun run dev --tools "what time is it, and what is (12*7)+3?"
+
+# enable a subset of tools
+bun run dev --once --tools calculator "compute (2+3)*4"
+
+# tool-use with full debug payloads (request/response/stream events plus
+# agentic round, tool call, and tool result frames on stderr)
+bun run dev --debug --tools "what's the weather in Paris?" 2>tools.log
+
+# same prompt, but with Anthropic's official SDK toolRunner instead of
+# our hand-rolled loop (same hooks/rendering, different loop internals)
+bun run dev --tools --runner sdk "what time is it?"
+
 # single-shot via stdin pipe (no REPL — exits after one reply)
 echo "summarize: hello world" | bun run dev
 
@@ -83,7 +97,32 @@ bun run start "hi" # runs the bundled output
 | `--stream`       | off                 | Stream the response, printing tokens as they arrive. |
 | `--prefill <txt>`| (none)              | Assistant prefill — model continues from this text.  |
 | `--stop <seq>`   | (none)              | Stop sequence; repeat for multiple (max 4 per API).  |
+| `--tools [names]`| off                 | Enable tool-use. Bare flag enables all built-ins; pass a comma-separated subset, e.g. `--tools calculator,get_time`. |
+| `--max-iterations N` | unbounded       | Cap the tool-use loop at N assistant turns. When the cap fires, the REPL prints a warning and the model's last (unfinished) tool-call message is the final response. |
+| `--runner <name>`| `local`             | Pick the tool-use loop: `local` is our hand-rolled `runAgenticTurn`; `sdk` is Anthropic's `client.beta.messages.toolRunner()` (beta API). |
 | `--help`         | —                   | Print usage and exit.                                |
+
+## Tools
+
+The CLI ships with four demo tools — `echo`, `get_time`, `calculator`,
+and `get_weather` (mocked). Enable them with `--tools`:
+
+```bash
+# all built-ins
+bun run dev --tools "what time is it, and what is (12*7)+3?"
+
+# subset
+bun run dev --once --tools calculator "compute (2+3)*4"
+```
+
+Tool calls and results are printed to stderr (`[tool] name(input)` then
+`  → name: result`); the final assistant text goes to stdout. When the
+model calls multiple tools in one turn, approval prompts run serially
+but execution runs concurrently via `Promise.all`. Cap the loop with
+`--max-iterations N`. The tools path always streams and ignores
+`--prefill`. To add a new tool — or to flag it as mutating (the REPL
+prompts y/N before running, via the `MUTATING_TOOLS` set in
+`builtins.ts`) — see `src/core/tools/CLAUDE.md`.
 
 ## Prompt evaluation workflow
 
@@ -173,7 +212,19 @@ src/
 │   ├── client.ts     # AnthropicClient singleton (init/get/reset)
 │   ├── messages.ts   # addUserMessage, addAssistantMessage, streamAssistantMessage, MessageParam
 │   ├── constants.ts  # DEFAULT_MODEL, DEFAULT_MAX_TOKENS
-│   └── util.ts       # errMsg helper
+│   ├── util.ts       # errMsg helper
+│   └── tools/            # tool-use: Tool type, per-tool files, runAgenticTurn loop
+│       ├── CLAUDE.md
+│       ├── index.ts
+│       ├── types.ts      # Tool interface
+│       ├── define.ts     # defineTool() — thin wrapper over SDK's betaZodTool
+│       ├── echo.ts       # one file per built-in tool
+│       ├── get_time.ts
+│       ├── calculator.ts
+│       ├── get_weather.ts
+│       ├── builtins.ts   # BUILTIN_TOOLS registry + selectTools() + MUTATING_TOOLS
+│       ├── agentic.ts    # runAgenticTurn (local hand-rolled loop)
+│       └── agentic_sdk.ts # runAgenticTurnSdk (client.beta.messages.toolRunner)
 └── eval/             # prompt evaluation module (`bun run eval`)
     ├── CLAUDE.md     # workflow docs + code-eval contract
     ├── index.ts      # public barrel — helper kit + types
@@ -183,10 +234,10 @@ src/
 ```
 
 `cli/` is everything that's specific to being a terminal program. `core/`
-is the LLM-facing piece (singleton client + message helpers) and is where
-future tool / MCP integrations will plug in, so they can be reused by
-non-CLI callers too. `eval/` is the prompt-evaluation module on top of
-`core/`.
+is the LLM-facing piece (singleton client + message helpers + the
+tool-use loop in `core/tools/`) and is where future MCP integration will
+plug in too — so it can be reused by non-CLI callers. `eval/` is the
+prompt-evaluation module on top of `core/`.
 
 ## Notes
 
