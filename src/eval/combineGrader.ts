@@ -17,6 +17,7 @@ import {
   type CheckResult,
   type CodeRow,
   type CombinedRow,
+  type CombinedScore,
   type GradedRow,
   type ModelGradeOrError,
   type RunRow,
@@ -127,11 +128,72 @@ function formatSummary(s: CombineSummary): string {
   ].join("\n");
 }
 
+function escapeCell(s: string): string {
+  return s.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+}
+
+function fullCell(s: string): string {
+  return s.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+}
+
+function truncateCell(s: string, max = 80): string {
+  const flat = escapeCell(s);
+  if (flat.length <= max) return flat;
+  return `${flat.slice(0, max - 1)}…`;
+}
+
+function formatCodeCell(
+  code: (CheckResult & { error?: boolean }) | undefined,
+): string {
+  if (code === undefined) return "—";
+  if (code.error === true) return "err";
+  return code.score.toFixed(2);
+}
+
+function formatModelCell(model: ModelGradeOrError | undefined): string {
+  if (model === undefined) return "—";
+  if ("error" in model) return "err";
+  return String(model.score);
+}
+
+function formatCombinedCell(combined: CombinedScore): string {
+  return typeof combined === "number" ? combined.toFixed(2) : "err";
+}
+
+function formatBulletCell(
+  model: ModelGradeOrError | undefined,
+  pick: (m: Exclude<ModelGradeOrError, { error: string }>) => readonly string[],
+): string {
+  if (model === undefined) return "—";
+  if ("error" in model) return "err";
+  const items = pick(model);
+  if (items.length === 0) return "—";
+  return items.map((s) => `• ${escapeCell(s)}`).join("<br>");
+}
+
+function formatReasoningCell(model: ModelGradeOrError | undefined): string {
+  if (model === undefined) return "—";
+  if ("error" in model) return "err";
+  return escapeCell(model.reasoning);
+}
+
+function renderPerInputTable(rows: readonly CombinedRow[]): string {
+  const header =
+    "| # | Input | Output | Code | Model | Combined | Strengths | Weaknesses | Reasoning |";
+  const sep = "|---|---|---|---|---|---|---|---|---|";
+  const body = rows.map(
+    (r, i) =>
+      `| ${i + 1} | ${fullCell(r.input)} | ${fullCell(r.output)} | ${formatCodeCell(r.code)} | ${formatModelCell(r.model)} | ${formatCombinedCell(r.combined)} | ${formatBulletCell(r.model, (m) => m.strengths)} | ${formatBulletCell(r.model, (m) => m.weaknesses)} | ${formatReasoningCell(r.model)} |`,
+  );
+  return [header, sep, ...body].join("\n");
+}
+
 function renderMarkdown(
   name: string,
   version: string,
   weights: CombineWeights,
   s: CombineSummary,
+  rows: readonly CombinedRow[],
 ): string {
   const histLine = [1, 2, 3, 4, 5]
     .map((b) => `${b}:${s.histogram[b] ?? 0}`)
@@ -139,12 +201,20 @@ function renderMarkdown(
   return [
     `# ${name} ${version} — combined report`,
     "",
-    `- weights:      code=${weights.code}, model=${weights.model}`,
-    `- avg combined: ${s.avgCombined.toFixed(2)} (over ${s.scored}/${s.total} valid rows)`,
-    `- avg code:     ${formatAvgCode(s.avgCode)}`,
-    `- avg model:    ${s.avgModel === null ? "—" : s.avgModel.toFixed(2)}`,
-    `- histogram:    ${histLine}`,
-    `- errors:       ${s.errors}`,
+    "## Summary",
+    "",
+    "| Metric | Value |",
+    "|---|---|",
+    `| weights | code=${weights.code}, model=${weights.model} |`,
+    `| avg combined | ${s.avgCombined.toFixed(2)} (over ${s.scored}/${s.total} valid rows) |`,
+    `| avg code | ${formatAvgCode(s.avgCode)} |`,
+    `| avg model | ${s.avgModel === null ? "—" : s.avgModel.toFixed(2)} |`,
+    `| histogram | ${histLine} |`,
+    `| errors | ${s.errors} |`,
+    "",
+    "## Per-input results",
+    "",
+    renderPerInputTable(rows),
     "",
   ].join("\n");
 }
@@ -240,7 +310,7 @@ export async function combineGrader(opts: {
       if (!isCombinedFresh(mdPath, [outPath])) {
         fs.writeFileSync(
           mdPath,
-          renderMarkdown(opts.name, opts.version, weights, s),
+          renderMarkdown(opts.name, opts.version, weights, s, cachedRows),
         );
       }
     }
@@ -329,7 +399,7 @@ export async function combineGrader(opts: {
     mdPath = combinedMarkdownPath(opts.name, opts.version);
     fs.writeFileSync(
       mdPath,
-      renderMarkdown(opts.name, opts.version, weights, s),
+      renderMarkdown(opts.name, opts.version, weights, s, combinedRows),
     );
   }
 
