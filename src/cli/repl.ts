@@ -91,7 +91,7 @@ function debug(label: string, payload: unknown): void {
   process.stderr.write(DEBUG_SEPARATOR);
 }
 
-export async function sendTurn(opts: TurnOpts): Promise<void> {
+export async function sendTurn(opts: TurnOpts) {
   addUserMessage(opts.messages, opts.text);
 
   const requestOpts = {
@@ -193,7 +193,7 @@ type ReplOpts = {
   hadInitialTurn: boolean;
 };
 
-export async function runRepl(opts: ReplOpts): Promise<void> {
+export async function runRepl(opts: ReplOpts) {
   process.stdout.write(
     opts.hadInitialTurn
       ? "\n(conversational mode — empty line, 'exit', or 'quit' to leave)\n"

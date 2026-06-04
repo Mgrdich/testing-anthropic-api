@@ -124,6 +124,59 @@ but execution runs concurrently via `Promise.all`. Cap the loop with
 prompts y/N before running, via the `MUTATING_TOOLS` set in
 `builtins.ts`) — see `src/core/tools/CLAUDE.md`.
 
+### Parallel tool calls in one turn
+
+Parallel tool use is the Anthropic API's default — we send nothing to
+enable it. The request payload (built in `core/tools/agentic.ts` and
+dispatched in `core/messages.ts`) is just `{ model, max_tokens,
+messages, tools }`; no `tool_choice`, no `disable_parallel_tool_use`.
+The model is free to emit multiple `tool_use` blocks in a single
+assistant response whenever the calls are independent, and the runner
+executes them concurrently.
+
+Ask for four independent things at once:
+
+```bash
+echo 'In a single response, please: (1) tell me the current time in UTC, \
+(2) compute 17 * 23 + 4 with the calculator, (3) get the weather in Tokyo, \
+and (4) get the weather in Paris. Call all four tools in parallel.' \
+  | bun run dev --tools --debug 2>&1 \
+  | awk '/\[debug\] agentic round/{f=1} f{print; if(/^}/){f=0; print "---"}} /^\[tool\]|^  [→✗]/{print}'
+```
+
+You should see one assistant turn with **four** `tool_use` blocks
+(`tool_use_blocks: 4`), all `[tool]` lines fire before any results,
+then a second turn that just wraps up with text:
+
+```
+[debug] agentic round {
+  "iteration": 1,
+  "stop_reason": "tool_use",
+  "tool_use_blocks": 4
+}
+---
+[tool] get_time({})
+[tool] calculator({"expression":"17 * 23 + 4"})
+[tool] get_weather({"city":"Tokyo"})
+[tool] get_weather({"city":"Paris"})
+  → get_time: 2026-06-04T16:22:14.355Z
+  → calculator: 395
+  → get_weather: {"city":"Tokyo","tempC":22,"condition":"sunny","note":"mocked data"}
+  → get_weather: {"city":"Paris","tempC":22,"condition":"sunny","note":"mocked data"}
+[debug] agentic round {
+  "iteration": 2,
+  "stop_reason": "end_turn",
+  "tool_use_blocks": 0
+}
+---
+```
+
+Two API calls total, not five. `tool_use_blocks > 1` in a single round
+is the unambiguous signal that the model batched the calls; the four
+`[tool]` lines printing contiguously before any `→` result is the
+two-phase dispatch (serial approval pass, then parallel `Promise.all`
+execution) in `core/tools/agentic.ts:82-118`.
+
 ## Prompt evaluation workflow
 
 `bun run eval` exposes a minimal end-to-end loop for iterating on a
