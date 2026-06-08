@@ -17,6 +17,19 @@ export function addUserMessage(messages: MessageParam[], text: string): void {
   messages.push({ role: "user", content: text });
 }
 
+/**
+ * Concatenate every text block in an assistant message's content into a
+ * single string. Non-text blocks (tool_use, etc.) are ignored. For
+ * single-block responses this is equivalent to `content[0].text`.
+ */
+export function extractText(content: Anthropic.Message["content"]): string {
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === "text") parts.push(block.text);
+  }
+  return parts.join("");
+}
+
 function withPrefill(
   messages: MessageParam[],
   prefill: string | undefined,

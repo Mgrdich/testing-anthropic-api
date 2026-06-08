@@ -1,4 +1,5 @@
 import type { Embedder } from "@/rag/embedder.ts";
+import { dot } from "@/rag/math.ts";
 import type { Chunk, SemanticConfig } from "@/rag/types.ts";
 
 type Sentence = { text: string; start: number; end: number };
@@ -13,13 +14,6 @@ function splitSentences(text: string): Sentence[] {
     out.push({ text: raw.trim(), start: m.index, end: m.index + raw.length });
   }
   return out;
-}
-
-function dot(a: Float32Array, b: Float32Array): number {
-  const len = Math.min(a.length, b.length);
-  let s = 0;
-  for (let i = 0; i < len; i++) s += (a[i] ?? 0) * (b[i] ?? 0);
-  return s;
 }
 
 function percentile(values: number[], p: number): number {

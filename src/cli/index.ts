@@ -3,10 +3,10 @@ import { type Args, parseArgs, printHelp } from "@/cli/args.ts";
 import { runRepl, sendTurn } from "@/cli/repl.ts";
 import { readStdin } from "@/cli/stdin.ts";
 
-export async function runCli() {
+export async function runCli(argv: readonly string[]): Promise<void> {
   let args: Args;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseArgs(argv);
   } catch (err) {
     process.stderr.write(`error: ${errMsg(err)}\n\n`);
     printHelp();

@@ -4,6 +4,7 @@ export { generateSyntheticDoc } from "@/rag/doc/generate.ts";
 export { TOPICS } from "@/rag/doc/template.ts";
 export type { HandbookTopic } from "@/rag/doc/template.ts";
 export { Embedder } from "@/rag/embedder.ts";
+export { dot, l2Normalize } from "@/rag/math.ts";
 export { answerWithClaude, buildContext } from "@/rag/generate-answer.ts";
 export { retrieveHybrid, rrf } from "@/rag/hybrid.ts";
 export { runRag } from "@/rag/rag.ts";

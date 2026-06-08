@@ -5,6 +5,7 @@ import {
   type MessageParam,
 } from "@/core/index.ts";
 import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
+import { extractJsonSpan } from "@/eval/json.ts";
 import { loadAuxPrompt } from "@/eval/prompts.ts";
 import { gradedPath, runsPath } from "@/eval/paths.ts";
 import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
@@ -28,14 +29,8 @@ exactly this schema:
 }
 `;
 
-function extractJsonObject(text: string): unknown {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error("no JSON object found in response");
-  }
-  return JSON.parse(text.slice(start, end + 1));
-}
+const extractJsonObject = (text: string): unknown =>
+  extractJsonSpan(text, "{", "}", "no JSON object found in response");
 
 function summarizeIssues(
   issues: { path: PropertyKey[]; message: string }[],

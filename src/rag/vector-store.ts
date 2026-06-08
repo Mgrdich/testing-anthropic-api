@@ -1,4 +1,5 @@
 import { Embedder } from "@/rag/embedder.ts";
+import { dot } from "@/rag/math.ts";
 import type { Retriever, ScoredId } from "@/rag/types.ts";
 
 export class VectorStore {
@@ -31,15 +32,6 @@ export class VectorStore {
     scores.sort((a, b) => b.score - a.score);
     return scores.slice(0, Math.min(k, n));
   }
-}
-
-function dot(a: Float32Array, b: Float32Array): number {
-  const len = Math.min(a.length, b.length);
-  let s = 0;
-  for (let i = 0; i < len; i++) {
-    s += (a[i] ?? 0) * (b[i] ?? 0);
-  }
-  return s;
 }
 
 export class VectorRetriever implements Retriever {

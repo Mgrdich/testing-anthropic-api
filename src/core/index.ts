@@ -1,4 +1,4 @@
-export { addAssistantMessage, addUserMessage, streamAssistantMessage } from "@/core/messages.ts";
+export { addAssistantMessage, addUserMessage, extractText, streamAssistantMessage } from "@/core/messages.ts";
 export type { AddAssistantOptions, MessageParam, StreamAssistantOptions } from "@/core/messages.ts";
 export { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 export { AnthropicClient } from "@/core/client.ts";
@@ -9,6 +9,8 @@ export {
   getString as getStringFlag,
   makeCli,
   parseArgs,
+  runMain,
+  writeUsageError,
 } from "@/core/cli.ts";
 export type { Cli, Flags } from "@/core/cli.ts";
 export {

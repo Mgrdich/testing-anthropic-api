@@ -1,21 +1,7 @@
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
+import { l2Normalize } from "@/rag/math.ts";
 
 const EMBED_DIM = 384;
-
-function l2Normalize(vec: Float32Array): Float32Array {
-  let sumSq = 0;
-  for (let i = 0; i < vec.length; i++) {
-    const v = vec[i] ?? 0;
-    sumSq += v * v;
-  }
-  const norm = Math.sqrt(sumSq);
-  if (norm === 0) return vec;
-  const out = new Float32Array(vec.length);
-  for (let i = 0; i < vec.length; i++) {
-    out[i] = (vec[i] ?? 0) / norm;
-  }
-  return out;
-}
 
 export class Embedder {
   private static instance: Embedder | null = null;

@@ -5,6 +5,7 @@ import {
   type MessageParam,
 } from "@/core/index.ts";
 import { loadAuxPrompt } from "@/eval/prompts.ts";
+import { extractJsonSpan } from "@/eval/json.ts";
 import { datasetPath } from "@/eval/paths.ts";
 import { writeJsonl } from "@/eval/jsonl.ts";
 import { DatasetItemSchema, type DatasetItem } from "@/eval/types.ts";
@@ -23,16 +24,8 @@ const GEN_MAX_TOKENS = 4096;
 const GEN_PREFILL = "```json\n[";
 const GEN_STOP = "]\n```";
 
-function extractJsonArray(text: string): unknown {
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error(
-      `model did not return a JSON array (no '[' or ']' found):\n${text}`,
-    );
-  }
-  return JSON.parse(text.slice(start, end + 1));
-}
+const extractJsonArray = (text: string): unknown =>
+  extractJsonSpan(text, "[", "]", "model did not return a JSON array");
 
 export async function generateDataset(opts: {
   name: string;

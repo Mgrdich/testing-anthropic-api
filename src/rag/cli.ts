@@ -1,4 +1,4 @@
-import { errMsg, makeCli, parseArgs } from "@/core/index.ts";
+import { makeCli, parseArgs, runMain, writeUsageError } from "@/core/index.ts";
 import type { Flags } from "@/core/index.ts";
 import { generateSyntheticDoc } from "@/rag/doc/generate.ts";
 import { runRag } from "@/rag/rag.ts";
@@ -47,8 +47,7 @@ Subcommands:
 `;
 
 function die(msg: string, code = 2): never {
-  process.stderr.write(`error: ${msg}\n\n${USAGE}`);
-  process.exit(code);
+  writeUsageError(USAGE, msg, code);
 }
 
 const { getString, getInt, getFloat, getBool, getEnum } = makeCli(USAGE);
@@ -235,7 +234,4 @@ async function main(argv: readonly string[]): Promise<void> {
   }
 }
 
-main(process.argv.slice(2)).catch((err) => {
-  process.stderr.write(`error: ${errMsg(err)}\n`);
-  process.exit(1);
-});
+runMain(main);

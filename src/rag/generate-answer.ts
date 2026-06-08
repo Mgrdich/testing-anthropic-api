@@ -1,4 +1,4 @@
-import { addUserMessage, streamAssistantMessage } from "@/core/messages.ts";
+import { addUserMessage, extractText, streamAssistantMessage } from "@/core/messages.ts";
 import type { MessageParam } from "@/core/messages.ts";
 import type { Retrieved } from "@/rag/types.ts";
 
@@ -38,6 +38,5 @@ export async function answerWithClaude(
       if (onText) stream.on("text", onText);
     },
   );
-  const first = final.content[0];
-  return first && first.type === "text" ? first.text : "";
+  return extractText(final.content);
 }

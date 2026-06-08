@@ -1,4 +1,4 @@
-import { addAssistantMessage } from "@/core/messages.ts";
+import { addAssistantMessage, extractText } from "@/core/messages.ts";
 import type { MessageParam } from "@/core/messages.ts";
 import { TOPICS } from "@/rag/doc/template.ts";
 import type { HandbookTopic } from "@/rag/doc/template.ts";
@@ -72,14 +72,4 @@ export async function generateSyntheticDoc(
     sectionsWritten: topics.length,
     totalChars: finalText.length,
   };
-}
-
-function extractText(content: ReadonlyArray<{ type: string; text?: string }>): string {
-  const out: string[] = [];
-  for (const block of content) {
-    if (block.type === "text" && typeof block.text === "string") {
-      out.push(block.text);
-    }
-  }
-  return out.join("");
 }

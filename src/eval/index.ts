@@ -48,3 +48,4 @@ export {
   runsPath,
 } from "@/eval/paths.ts";
 export { appendJsonl, readJsonl, writeJsonl } from "@/eval/jsonl.ts";
+export { extractJsonSpan } from "@/eval/json.ts";

@@ -11,7 +11,38 @@
  *   const { positional, flags } = parseArgs(argv.slice(1));
  *   const k = cli.getInt(flags, "k", 5, { min: 1 });
  *   const mode = cli.getEnum(flags, "mode", ["a", "b", "c"], "a");
+ *   runMain(main);
  */
+
+import { errMsg } from "@/core/util.ts";
+
+/**
+ * Top-level entrypoint catch shared by every sub-CLI. Reads argv from
+ * process.argv (slicing the `bun run …` prefix), runs `main`, and exits
+ * 1 with `error: <msg>` on any thrown error.
+ */
+export function runMain(
+  main: (argv: readonly string[]) => Promise<void>,
+): void {
+  main(process.argv.slice(2)).catch((err) => {
+    process.stderr.write(`error: ${errMsg(err)}\n`);
+    process.exit(1);
+  });
+}
+
+/**
+ * Write a usage-block error to stderr and exit. The per-CLI `die` function
+ * stays local (TS narrowing on `never` arrow functions doesn't propagate
+ * through destructuring) but its body is this single call.
+ */
+export function writeUsageError(
+  usage: string,
+  msg: string,
+  code = 2,
+): never {
+  process.stderr.write(`error: ${msg}\n\n${usage}`);
+  process.exit(code);
+}
 
 export type Flags = {
   positional: string[];
@@ -81,8 +112,7 @@ export type Cli = {
 
 export function makeCli(usage: string): Cli {
   function die(msg: string, code = 2): never {
-    process.stderr.write(`error: ${msg}\n\n${usage}`);
-    process.exit(code);
+    writeUsageError(usage, msg, code);
   }
 
   const getInt = (
