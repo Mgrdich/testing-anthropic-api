@@ -1,4 +1,4 @@
-import { errMsg } from "@/core/index.ts";
+import { errMsg, makeCli, parseArgs } from "@/core/index.ts";
 import {
   CheckTemplateSchema,
   combineGrader,
@@ -53,37 +53,7 @@ function die(msg: string, code = 2): never {
   process.exit(code);
 }
 
-
-type Flags = {
-  positional: string[];
-  flags: Record<string, string | true>;
-};
-
-function parseArgs(argv: readonly string[]): Flags {
-  const out: Flags = { positional: [], flags: {} };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === undefined) continue;
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const next = argv[i + 1];
-      if (next === undefined || next.startsWith("--")) {
-        out.flags[key] = true;
-      } else {
-        out.flags[key] = next;
-        i++;
-      }
-    } else {
-      out.positional.push(a);
-    }
-  }
-  return out;
-}
-
-function getString(flags: Flags["flags"], key: string): string | undefined {
-  const v = flags[key];
-  return typeof v === "string" ? v : undefined;
-}
+const { getString, getInt } = makeCli(USAGE);
 
 async function main(argv: readonly string[]): Promise<void> {
   const sub = argv[0];
@@ -113,11 +83,7 @@ async function main(argv: readonly string[]): Promise<void> {
     case "gen": {
       const name = positional[0];
       if (!name) die("gen requires <name>");
-      const countRaw = getString(flags, "count") ?? "10";
-      const count = Number.parseInt(countRaw, 10);
-      if (!Number.isFinite(count) || count <= 0) {
-        die(`--count must be a positive integer (got ${countRaw})`);
-      }
+      const count = getInt(flags, "count", 10, { min: 1 });
       const force = flags["force"] === true;
       const result = await generateDataset({ name, count, force });
       process.stdout.write(`wrote ${result.path} (${result.count} items)\n`);

@@ -5,6 +5,13 @@ export { AnthropicClient } from "@/core/client.ts";
 export type { InitOptions } from "@/core/client.ts";
 export { errMsg } from "@/core/util.ts";
 export {
+  getBoolFlag,
+  getString as getStringFlag,
+  makeCli,
+  parseArgs,
+} from "@/core/cli.ts";
+export type { Cli, Flags } from "@/core/cli.ts";
+export {
   BUILTIN_TOOLS,
   defineTool,
   MUTATING_TOOLS,
