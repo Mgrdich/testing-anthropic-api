@@ -1,5 +1,5 @@
-import { makeCli, parseArgs, runMain, writeUsageError } from "@/core/index.ts";
-import type { Flags } from "@/core/index.ts";
+import { makeCli, parseArgs, runMain } from "@/core/index.ts";
+import type { DieFn, Flags } from "@/core/index.ts";
 import { generateSyntheticDoc } from "@/rag/doc/generate.ts";
 import { runRag } from "@/rag/rag.ts";
 import type { ChunkerConfig, Retrieved } from "@/rag/types.ts";
@@ -46,11 +46,9 @@ Subcommands:
       --generate is off by default to keep the comparison cheap.
 `;
 
-function die(msg: string, code = 2): never {
-  writeUsageError(USAGE, msg, code);
-}
-
-const { getString, getInt, getFloat, getBool, getEnum } = makeCli(USAGE);
+const cli = makeCli(USAGE);
+const die: DieFn = cli.die;
+const { getString, getInt, getFloat, getBool, getEnum } = cli;
 
 const CHUNKERS = ["size", "structure", "semantic"] as const;
 const RETRIEVALS = ["vector", "bm25", "hybrid"] as const;

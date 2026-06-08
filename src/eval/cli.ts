@@ -1,4 +1,5 @@
-import { makeCli, parseArgs, runMain, writeUsageError } from "@/core/index.ts";
+import { makeCli, parseArgs, runMain } from "@/core/index.ts";
+import type { DieFn } from "@/core/index.ts";
 import {
   CheckTemplateSchema,
   combineGrader,
@@ -48,11 +49,9 @@ Subcommands:
       code, graded); --force recomputes regardless.
 `;
 
-function die(msg: string, code = 2): never {
-  writeUsageError(USAGE, msg, code);
-}
-
-const { getString, getInt } = makeCli(USAGE);
+const cli = makeCli(USAGE);
+const die: DieFn = cli.die;
+const { getString, getInt } = cli;
 
 async function main(argv: readonly string[]): Promise<void> {
   const sub = argv[0];

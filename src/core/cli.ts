@@ -85,8 +85,18 @@ export function getBoolFlag(flags: Flags["flags"], key: string): boolean {
 export type IntOpts = { min?: number; max?: number };
 export type FloatOpts = { min?: number; max?: number };
 
+/**
+ * Function type for the per-CLI `die` helper. Exported so sub-CLIs can
+ * destructure most of `makeCli`'s return but anchor `die` with an explicit
+ * type annotation (`const die: DieFn = cli.die`), which preserves TS's
+ * `never`-return narrowing through control-flow analysis. Destructured
+ * bindings lose that narrowing — see the audit in commit 09aa54f's
+ * follow-up discussion.
+ */
+export type DieFn = (msg: string, code?: number) => never;
+
 export type Cli = {
-  die: (msg: string, code?: number) => never;
+  die: DieFn;
   getString: (flags: Flags["flags"], key: string) => string | undefined;
   getBoolFlag: (flags: Flags["flags"], key: string) => boolean;
   getInt: (

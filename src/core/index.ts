@@ -12,7 +12,7 @@ export {
   runMain,
   writeUsageError,
 } from "@/core/cli.ts";
-export type { Cli, Flags } from "@/core/cli.ts";
+export type { Cli, DieFn, Flags } from "@/core/cli.ts";
 export {
   BUILTIN_TOOLS,
   defineTool,
