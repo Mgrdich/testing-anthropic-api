@@ -19,13 +19,16 @@ export function buildContext(retrieved: ReadonlyArray<Retrieved>): string {
 export async function answerWithClaude(
   retrieved: ReadonlyArray<Retrieved>,
   query: string,
-  opts?: { model?: string; onText?: (delta: string) => void },
+  opts?: {
+    model?: string;
+    onText?: (delta: string) => void;
+    onPrompt?: (prompt: { system: string; user: string }) => void;
+  },
 ): Promise<string> {
+  const userMessage = `Context:\n\n${buildContext(retrieved)}\n\n---\n\nQuestion: ${query}`;
+  if (opts?.onPrompt) opts.onPrompt({ system: SYSTEM, user: userMessage });
   const messages: MessageParam[] = [];
-  addUserMessage(
-    messages,
-    `Context:\n\n${buildContext(retrieved)}\n\n---\n\nQuestion: ${query}`,
-  );
+  addUserMessage(messages, userMessage);
   const final = await streamAssistantMessage(
     messages,
     {

@@ -23,6 +23,10 @@ Subcommands:
       --no-generate                       skip the Claude answer step
       --show-chunks                       print the full text of each chunk
       --answer-model ID                   model id for the answer step
+      --debug                             emit [debug] traces to stderr:
+                                            full chunk inventory, query
+                                            tokens, per-retriever rankings
+                                            before RRF, exact prompt
 
       Size chunker:
         --size-max-chars N        default 1000
@@ -40,10 +44,11 @@ Subcommands:
         --semantic-min-chars N        default 200
         --semantic-max-chars N        default 2000
 
-  compare <doc-path> "question" [--k N] [--retrieval MODE] [--generate]
+  compare <doc-path> "question" [--k N] [--retrieval MODE] [--generate] [--debug]
       Run all three chunkers with their defaults on the same query and print
       a side-by-side comparison of chunk counts, timings, and top-k chunks.
       --generate is off by default to keep the comparison cheap.
+      --debug emits per-stage traces to stderr for each chunker run.
 `;
 
 const cli = makeCli(USAGE);
@@ -138,6 +143,7 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]): Promise<vo
   const retrieval = getEnum(flags, "retrieval", RETRIEVALS, "hybrid");
   const generate = flags["no-generate"] !== true;
   const showChunks = flags["show-chunks"] === true;
+  const debug = flags["debug"] === true;
   const answerModel = getString(flags, "answer-model");
 
   const chunkerConfig = buildChunkerConfig(strategy, flags);
@@ -149,29 +155,29 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]): Promise<vo
     k,
     retrieval,
     generate,
+    debug,
     ...(answerModel ? { answerModel } : {}),
     onText: (delta) => process.stdout.write(delta),
+    onRetrieved: (retrieved, timings, chunks) => {
+      process.stdout.write(
+        `chunker=${strategy} chunks=${chunks.length} ` +
+          `retrieval=${retrieval} k=${k}\n` +
+          `timings: chunk=${timings.chunk.toFixed(0)}ms ` +
+          `index=${timings.index.toFixed(0)}ms ` +
+          `retrieve=${timings.retrieve.toFixed(0)}ms\n`,
+      );
+      process.stdout.write(`\n=== retrieved chunks ===`);
+      printRetrieved(retrieved, showChunks);
+      if (generate && retrieved.length > 0) {
+        process.stdout.write(`\n=== answer ===\n`);
+      }
+    },
   });
 
-  process.stdout.write(
-    `chunker=${strategy} chunks=${result.chunks.length} ` +
-      `retrieval=${retrieval} k=${k}\n` +
-      `timings: chunk=${result.timings.chunk.toFixed(0)}ms ` +
-      `index=${result.timings.index.toFixed(0)}ms ` +
-      `retrieve=${result.timings.retrieve.toFixed(0)}ms`,
-  );
   if (result.timings.generate !== undefined) {
-    process.stdout.write(` generate=${result.timings.generate.toFixed(0)}ms`);
-  }
-  process.stdout.write("\n");
-
-  process.stdout.write(`\n=== retrieved chunks ===`);
-  printRetrieved(result.retrieved, showChunks);
-
-  if (result.answer !== undefined) {
-    process.stdout.write(`\n=== answer ===\n`);
-    // onText already streamed the answer to stdout; we just need a trailing newline.
-    process.stdout.write("\n");
+    process.stdout.write(
+      `\ngenerate=${result.timings.generate.toFixed(0)}ms\n`,
+    );
   }
 }
 
@@ -183,6 +189,7 @@ async function cmdCompare(positional: string[], flags: Flags["flags"]): Promise<
   const k = getInt(flags, "k", 5, { min: 1 });
   const retrieval = getEnum(flags, "retrieval", RETRIEVALS, "hybrid");
   const generate = flags["generate"] === true;
+  const debug = flags["debug"] === true;
 
   const strategies: Array<ChunkerConfig["strategy"]> = ["size", "structure", "semantic"];
   for (const strategy of strategies) {
@@ -195,20 +202,26 @@ async function cmdCompare(positional: string[], flags: Flags["flags"]): Promise<
       k,
       retrieval,
       generate,
+      debug,
       onText: generate ? (delta) => process.stdout.write(delta) : undefined,
+      onRetrieved: (retrieved, timings, chunks) => {
+        process.stdout.write(
+          `chunks=${chunks.length} ` +
+            `timings: chunk=${timings.chunk.toFixed(0)}ms ` +
+            `index=${timings.index.toFixed(0)}ms ` +
+            `retrieve=${timings.retrieve.toFixed(0)}ms\n`,
+        );
+        printRetrieved(retrieved, false);
+        if (generate && retrieved.length > 0) {
+          process.stdout.write(`\n=== answer ===\n`);
+        }
+      },
     });
-    process.stdout.write(
-      `chunks=${result.chunks.length} ` +
-        `timings: chunk=${result.timings.chunk.toFixed(0)}ms ` +
-        `index=${result.timings.index.toFixed(0)}ms ` +
-        `retrieve=${result.timings.retrieve.toFixed(0)}ms`,
-    );
     if (result.timings.generate !== undefined) {
-      process.stdout.write(` generate=${result.timings.generate.toFixed(0)}ms`);
+      process.stdout.write(
+        `\ngenerate=${result.timings.generate.toFixed(0)}ms\n`,
+      );
     }
-    process.stdout.write("\n");
-    printRetrieved(result.retrieved, false);
-    if (generate) process.stdout.write("\n");
   }
 }
 

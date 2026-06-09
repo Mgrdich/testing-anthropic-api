@@ -19,18 +19,32 @@ export function rrf(
   return out;
 }
 
+export type HybridRanking = {
+  name: string;
+  ranking: ReadonlyArray<ScoredId>;
+};
+
 /**
  * Generic hybrid retrieval: query every retriever, oversample by 3x, RRF-fuse,
  * slice to k. Works with any combination of vector / BM25 / future retrievers.
+ *
+ * `opts.onRankings` fires after every retriever has returned its top-`k*3`
+ * ranking but before RRF fuses them — useful for debug tracing.
  */
 export async function retrieveHybrid(
   retrievers: ReadonlyArray<Retriever>,
   query: string,
   k: number,
   rrfK: number = 60,
+  opts?: { onRankings?: (per: ReadonlyArray<HybridRanking>) => void },
 ): Promise<RrfScoredId[]> {
   if (retrievers.length === 0) return [];
   const over = Math.max(k * 3, k);
   const rankings = await Promise.all(retrievers.map((r) => r.search(query, over)));
+  if (opts?.onRankings) {
+    opts.onRankings(
+      retrievers.map((r, i) => ({ name: r.name, ranking: rankings[i] ?? [] })),
+    );
+  }
   return rrf(rankings, rrfK).slice(0, k);
 }
