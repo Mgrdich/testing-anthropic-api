@@ -23,7 +23,7 @@ export class Debug {
 
   static get(): Debug {
     if (!Debug.instance) Debug.instance = new Debug();
-    
+
     return Debug.instance;
   }
 

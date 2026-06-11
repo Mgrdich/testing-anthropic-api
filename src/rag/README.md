@@ -10,10 +10,9 @@ chunkers or retrievers, and measure their behavior.
 
 ## Try it out (sequential walkthrough)
 
-Run these in order. Each step exercises a different part of the system.
-Steps 1 through 5 (including 4b) don't spend any API tokens — they use
-`--no-generate` to skip the Claude call. Steps 6 and 7 are the only ones
-that cost tokens.
+Run these in order — every command is copy-pasteable as written and builds
+on the previous step. Steps 1 and 8 are the only ones that spend API
+tokens; steps 2 through 7 use `--no-generate` to skip the Claude call.
 
 ### 0. One-time setup
 
@@ -23,59 +22,77 @@ bun run typecheck      # the only correctness gate
 ```
 
 You also need `ANTHROPIC_API_KEY` set (in `.env` or your shell) — but only
-for the generation steps below.
+for steps 1 and 8.
 
-### 1. Cheapest path: BM25 + structure, no API (~50ms)
+### 1. Get a corpus: generate the synthetic handbook (~2 Haiku calls, <$0.01)
 
-Point at any Markdown file. BM25 doesn't load the embedder; `--no-generate`
-skips the Claude call. This validates the chunker, BM25 index, and the
-retrieval pipeline end-to-end.
+The repo doesn't ship a corpus (`rag-handbook.md` is gitignored), so
+generate one. `--sections 2` produces the "Code Review" and "Incident
+Response" chapters — enough for every step below; bump to 12 for the
+full ~18-20k word handbook.
 
 ```bash
-bun run rag query path/to/any.md "your question" \
+bun run rag generate-doc --sections 2 --out ./rag-handbook.md
+# later, the full handbook (~12 Haiku calls, ~$0.05):
+bun run rag generate-doc --sections 12 --out ./rag-handbook.md --force
+```
+
+Watch stderr for `[N/M] wrote section: <title>` after each call.
+
+Already have a Markdown file? Use it instead — substitute your path and a
+question about its content in every command below.
+
+### 2. Cheapest path: BM25 + structure, no API (~50ms)
+
+BM25 doesn't load the embedder; `--no-generate` skips the Claude call.
+This validates the chunker, BM25 index, and the retrieval pipeline
+end-to-end. The query shares exact terms with the doc — lexical
+retrieval's home turf.
+
+```bash
+bun run rag query ./rag-handbook.md "What are the incident severity levels?" \
   --chunker structure --retrieval bm25 --no-generate --k 3
 ```
 
-If you don't have a Markdown file handy, drop a few paragraphs into
-`/tmp/test.md` and use that.
-
-### 2. Exercise the embedder: vector retrieval, no API (~1-5s first run)
+### 3. Exercise the embedder: vector retrieval, no API (~1-5s first run)
 
 This loads `Xenova/all-MiniLM-L6-v2` on first call (downloads ~25MB to
-`~/.cache/huggingface`); subsequent runs use the cache.
+`~/.cache/huggingface`); subsequent runs use the cache. The query is a
+paraphrase that shares almost no words with the doc — embeddings should
+still find the incident-response content where BM25 would struggle.
 
 ```bash
-bun run rag query path/to/any.md "your question" \
+bun run rag query ./rag-handbook.md "what to do when production breaks" \
   --chunker structure --retrieval vector --no-generate --k 3
 ```
 
 Watch stderr for `[embedder] loading Xenova/all-MiniLM-L6-v2`.
 
-### 3. Exercise the semantic chunker, no API
+### 4. Exercise the semantic chunker, no API
 
 The semantic chunker calls the embedder during chunking (sentence-window
 cosine distances + 95th percentile breakpoints), then runs hybrid retrieval
 (BM25 + vector with RRF fusion) on the resulting chunks.
 
 ```bash
-bun run rag query path/to/any.md "your question" \
+bun run rag query ./rag-handbook.md "How should reviewers give feedback?" \
   --chunker semantic --retrieval hybrid --no-generate --k 3
 ```
 
-### 4. Try every chunker on the same query (no API)
+### 5. Try every chunker on the same query (no API)
 
 ```bash
-bun run rag compare path/to/any.md "your question" --k 3
+bun run rag compare ./rag-handbook.md "How are postmortems run?" --k 3
 ```
 
 Output is sectioned by chunker — eyeball whether each one surfaces the same
 relevant content or different chunks. Add `--debug` to also see per-stage
 traces for each chunker run.
 
-### 4b. Inspect a run with `--debug` (no API)
+### 6. Inspect a run with `--debug` (no API)
 
 ```bash
-bun run rag query path/to/any.md "your question" \
+bun run rag query ./rag-handbook.md "How are postmortems run?" \
   --no-generate --k 3 --debug 2>debug.log
 ```
 
@@ -84,34 +101,21 @@ Stdout still gets the normal chunker / timings / retrieved-chunks output;
 the per-retriever rankings before RRF fuses them. See [Debug mode](#debug-mode)
 below for what each trace block means.
 
-### 5. Tune chunker params
+### 7. Tune chunker params
 
 ```bash
 # tighter size chunks with more overlap
-bun run rag query path/to/any.md "your question" \
+bun run rag query ./rag-handbook.md "How are postmortems run?" \
   --chunker size --size-max-chars 500 --size-overlap 200 \
   --no-generate --k 3
 
 # semantic with a more aggressive breakpoint (more, smaller chunks)
-bun run rag query path/to/any.md "your question" \
+bun run rag query ./rag-handbook.md "How are postmortems run?" \
   --chunker semantic --semantic-percentile 75 \
   --no-generate --k 3
 ```
 
-### 6. Generate the synthetic handbook (~12 Haiku calls, ~$0.05)
-
-If you don't have a corpus handy, generate the example. Start with `--sections 2`
-to keep it cheap; bump to 12 for the full ~18-20k word handbook.
-
-```bash
-bun run rag generate-doc --sections 2 --out ./rag-handbook.md
-# re-run safely:
-bun run rag generate-doc --sections 12 --out ./rag-handbook.md --force
-```
-
-Watch stderr for `[N/M] wrote section: <title>` after each call.
-
-### 7. Full pipeline: retrieve + generate an answer (1 Sonnet call)
+### 8. Full pipeline: retrieve + generate an answer (1 Sonnet call)
 
 ```bash
 bun run rag query ./rag-handbook.md "How do we handle postmortems?" --k 5
