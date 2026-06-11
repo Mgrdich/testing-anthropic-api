@@ -42,6 +42,16 @@ Two modules under `src/`:
   currently rejects assistant prefill with a 400; use a prefill-capable
   model (e.g., `claude-haiku-4-5-20251001`) when exercising that path.
 
+Debug tracing is a process-global singleton, `Debug.get()` in
+`core/debug.ts` (same lazy-singleton shape as `Embedder.get()`). Each CLI
+calls `.enable()` once when it parses `--debug`; call sites then trace
+unconditionally via `dbg.log` / `dbg.block` / `dbg.json` — the enabled
+check lives inside the methods, so no `if (debug)` guards at call sites.
+Pass expensive trace bodies as thunks (only evaluated when enabled), and
+read `dbg.enabled` only where debug changes behavior rather than emitting
+a trace (e.g. full vs. truncated tool results in `repl.ts`). Do not thread
+`debug` booleans through function signatures or option types.
+
 `src/index.ts` is a 3-line entry that calls `runCli()`.
 
 Dual execution mode lives in `cli/index.ts`:

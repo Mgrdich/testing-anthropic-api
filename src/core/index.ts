@@ -4,6 +4,7 @@ export { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 export { AnthropicClient } from "@/core/client.ts";
 export type { InitOptions } from "@/core/client.ts";
 export { errMsg } from "@/core/util.ts";
+export { Debug } from "@/core/debug.ts";
 export {
   getBoolFlag,
   getString as getStringFlag,

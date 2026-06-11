@@ -3,6 +3,7 @@ import * as readline from "node:readline/promises";
 import {
   addAssistantMessage,
   addUserMessage,
+  Debug,
   MUTATING_TOOLS,
   runAgenticTurn,
   runAgenticTurnSdk,
@@ -12,6 +13,8 @@ import {
   type MessageParam,
 } from "@/core/index.ts";
 import type { Args } from "@/cli/args.ts";
+
+const dbg = Debug.get();
 
 type TurnOpts = {
   messages: MessageParam[];
@@ -35,36 +38,35 @@ function compactJson(value: unknown): string {
 }
 
 function buildAgenticHooks(
-  args: Args,
   rl: readline.Interface | undefined,
 ): AgenticHooks {
   return {
     onStream: (stream) => {
-      if (args.debug) {
+      if (dbg.enabled) {
         stream.on("streamEvent", (event) => {
-          debug(`stream event ${event.type}`, event);
+          dbg.json(`stream event ${event.type}`, event);
         });
         stream.on("error", (err) => {
-          debug("stream error", { message: String(err) });
+          dbg.json("stream error", { message: String(err) });
         });
       }
       stream.on("text", (delta) => process.stdout.write(delta));
     },
     onRound: (info) => {
-      if (args.debug) debug("agentic round", info);
+      dbg.json("agentic round", info);
     },
     onToolCall: (name, input) => {
       process.stdout.write("\n");
       process.stderr.write(`[tool] ${name}(${compactJson(input)})\n`);
-      if (args.debug) debug("tool call", { name, input });
+      dbg.json("tool call", { name, input });
     },
     onToolResult: (name, result, isError) => {
       const sigil = isError ? "✗" : "→";
-      const shown = args.debug ? result : truncate(result, TOOL_RESULT_PREVIEW_MAX);
+      const shown = dbg.enabled ? result : truncate(result, TOOL_RESULT_PREVIEW_MAX);
       // Prefix with the tool name so concurrent results stay readable
       // when multiple tools fire in one round.
       process.stderr.write(`  ${sigil} ${name}: ${shown}\n`);
-      if (args.debug) debug("tool result", { name, result, isError });
+      dbg.json("tool result", { name, result, isError });
     },
     isMutating: (name) => MUTATING_TOOLS.has(name),
     approveMutating: async (name, input) => {
@@ -83,14 +85,6 @@ function buildAgenticHooks(
   };
 }
 
-const DEBUG_SEPARATOR = `${"-".repeat(60)}\n`;
-
-function debug(label: string, payload: unknown): void {
-  process.stderr.write(`\n${DEBUG_SEPARATOR}`);
-  process.stderr.write(`[debug] ${label} ${JSON.stringify(payload, null, 2)}\n`);
-  process.stderr.write(DEBUG_SEPARATOR);
-}
-
 export async function sendTurn(opts: TurnOpts) {
   addUserMessage(opts.messages, opts.text);
 
@@ -102,17 +96,15 @@ export async function sendTurn(opts: TurnOpts) {
     stop_sequences: opts.args.stopSequences,
   };
 
-  if (opts.args.debug) {
-    debug("request", {
-      ...requestOpts,
-      messages: opts.messages.length,
-      tools: opts.args.tools,
-    });
-  }
+  dbg.json("request", {
+    ...requestOpts,
+    messages: opts.messages.length,
+    tools: opts.args.tools,
+  });
 
   if (opts.args.tools) {
     const tools = selectTools(opts.args.tools);
-    const hooks = buildAgenticHooks(opts.args, opts.rl);
+    const hooks = buildAgenticHooks(opts.rl);
     const runner = opts.args.runner === "sdk" ? runAgenticTurnSdk : runAgenticTurn;
     const finalResponse = await runner(
       opts.messages,
@@ -120,7 +112,7 @@ export async function sendTurn(opts: TurnOpts) {
       tools,
       hooks,
     );
-    if (opts.args.debug) debug("final response", finalResponse);
+    dbg.json("final response", finalResponse);
     process.stdout.write("\n");
     if (finalResponse.stop_reason === "tool_use") {
       // runAgenticTurn returns a tool_use response only when the
@@ -142,12 +134,12 @@ export async function sendTurn(opts: TurnOpts) {
       opts.messages,
       requestOpts,
       (stream) => {
-        if (opts.args.debug) {
+        if (dbg.enabled) {
           stream.on("streamEvent", (event) => {
-            debug(`stream event ${event.type}`, event);
+            dbg.json(`stream event ${event.type}`, event);
           });
           stream.on("error", (err) => {
-            debug("stream error", { message: String(err) });
+            dbg.json("stream error", { message: String(err) });
           });
         }
         stream.on("text", (delta) => process.stdout.write(delta));
@@ -162,9 +154,7 @@ export async function sendTurn(opts: TurnOpts) {
     );
   }
 
-  if (opts.args.debug) {
-    debug("response", response);
-  }
+  dbg.json("response", response);
 
   const unhandled: typeof response.content = [];
   for (const block of response.content) {

@@ -1,4 +1,4 @@
-import { makeCli, parseArgs, runMain } from "@/core/index.ts";
+import { Debug, makeCli, parseArgs, runMain } from "@/core/index.ts";
 import type { DieFn, Flags } from "@/core/index.ts";
 import { generateSyntheticDoc } from "@/rag/doc/generate.ts";
 import { runRag } from "@/rag/rag.ts";
@@ -143,7 +143,6 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]): Promise<vo
   const retrieval = getEnum(flags, "retrieval", RETRIEVALS, "hybrid");
   const generate = flags["no-generate"] !== true;
   const showChunks = flags["show-chunks"] === true;
-  const debug = flags["debug"] === true;
   const answerModel = getString(flags, "answer-model");
 
   const chunkerConfig = buildChunkerConfig(strategy, flags);
@@ -155,7 +154,6 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]): Promise<vo
     k,
     retrieval,
     generate,
-    debug,
     ...(answerModel ? { answerModel } : {}),
     onText: (delta) => process.stdout.write(delta),
     onRetrieved: (retrieved, timings, chunks) => {
@@ -189,7 +187,6 @@ async function cmdCompare(positional: string[], flags: Flags["flags"]): Promise<
   const k = getInt(flags, "k", 5, { min: 1 });
   const retrieval = getEnum(flags, "retrieval", RETRIEVALS, "hybrid");
   const generate = flags["generate"] === true;
-  const debug = flags["debug"] === true;
 
   const strategies: Array<ChunkerConfig["strategy"]> = ["size", "structure", "semantic"];
   for (const strategy of strategies) {
@@ -202,7 +199,6 @@ async function cmdCompare(positional: string[], flags: Flags["flags"]): Promise<
       k,
       retrieval,
       generate,
-      debug,
       onText: generate ? (delta) => process.stdout.write(delta) : undefined,
       onRetrieved: (retrieved, timings, chunks) => {
         process.stdout.write(
@@ -232,6 +228,7 @@ async function main(argv: readonly string[]): Promise<void> {
     return;
   }
   const { positional, flags } = parseArgs(argv.slice(1));
+  if (flags["debug"] === true) Debug.get().enable();
 
   switch (sub) {
     case "generate-doc":

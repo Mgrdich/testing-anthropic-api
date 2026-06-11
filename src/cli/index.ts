@@ -1,4 +1,4 @@
-import { errMsg, type MessageParam } from "@/core/index.ts";
+import { Debug, errMsg, type MessageParam } from "@/core/index.ts";
 import { type Args, parseArgs, printHelp } from "@/cli/args.ts";
 import { runRepl, sendTurn } from "@/cli/repl.ts";
 import { readStdin } from "@/cli/stdin.ts";
@@ -17,6 +17,8 @@ export async function runCli(argv: readonly string[]): Promise<void> {
     printHelp();
     return;
   }
+
+  if (args.debug) Debug.get().enable();
 
   const messages: MessageParam[] = [];
 
