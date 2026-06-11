@@ -91,7 +91,7 @@ function buildChunkerConfig(
 function printRetrieved(
   retrieved: ReadonlyArray<Retrieved>,
   showChunks: boolean,
-): void {
+) {
   for (const r of retrieved) {
     const headingPath = r.chunk.metadata.headingPath?.join(" > ") ?? "";
     process.stdout.write(
@@ -110,7 +110,7 @@ function printRetrieved(
   }
 }
 
-async function cmdGenerateDoc(flags: Flags["flags"]): Promise<void> {
+async function cmdGenerateDoc(flags: Flags["flags"]) {
   const outPath = getString(flags, "out") ?? "./rag-handbook.md";
   const sections = getInt(flags, "sections", 12, { min: 1 });
   const model = getString(flags, "model");
@@ -133,7 +133,7 @@ async function cmdGenerateDoc(flags: Flags["flags"]): Promise<void> {
   );
 }
 
-async function cmdQuery(positional: string[], flags: Flags["flags"]): Promise<void> {
+async function cmdQuery(positional: string[], flags: Flags["flags"]) {
   const docPath = positional[0];
   const question = positional.slice(1).join(" ");
   if (!docPath || !question) die("query requires <doc-path> \"question\"");
@@ -179,7 +179,7 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]): Promise<vo
   }
 }
 
-async function cmdCompare(positional: string[], flags: Flags["flags"]): Promise<void> {
+async function cmdCompare(positional: string[], flags: Flags["flags"]) {
   const docPath = positional[0];
   const question = positional.slice(1).join(" ");
   if (!docPath || !question) die("compare requires <doc-path> \"question\"");
@@ -221,7 +221,7 @@ async function cmdCompare(positional: string[], flags: Flags["flags"]): Promise<
   }
 }
 
-async function main(argv: readonly string[]): Promise<void> {
+async function main(argv: readonly string[]) {
   const sub = argv[0];
   if (!sub || sub === "-h" || sub === "--help") {
     process.stdout.write(USAGE);

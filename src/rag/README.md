@@ -471,29 +471,30 @@ egalitarian; a smaller `k` privileges top hits.
 
 ## Generation step
 
-When `--no-generate` is not passed, the retrieved chunks are formatted as
-numbered context blocks and sent to Claude via the existing
-`streamAssistantMessage` from `@/core/messages.ts`:
+When `--no-generate` is not passed, the retrieved chunks are wrapped in XML
+tags (the prompt structure Anthropic recommends for separating context from
+the question) and sent to Claude via the existing `streamAssistantMessage`
+from `@/core/messages.ts`:
 
 ```
-System: "You answer questions using ONLY the provided context. Cite chunk
-        numbers inline like [1] or [3]. If the context is insufficient to
+System: "You answer the <question> using ONLY the chunks inside <context>.
+        Each chunk is wrapped in a <chunk> tag with an index attribute; cite
+        indices inline like [1] or [3]. If the context is insufficient to
         answer, say so explicitly — do not invent facts or use outside
         knowledge."
 
-User:   "Context:
-
-         [1] (id=struct-database-migrations.online-schema-change-0, score=0.553)
+User:   "<context>
+         <chunk index="1" id="struct-database-migrations.online-schema-change-0" score="0.553">
          <chunk 1 text>
-
-         ---
-
-         [2] (id=struct-database-migrations.backfills-1, score=0.270)
+         </chunk>
+         <chunk index="2" id="struct-database-migrations.backfills-1" score="0.270">
          <chunk 2 text>
+         </chunk>
+         </context>
 
-         ---
-
-         Question: How do I do an online schema change?"
+         <question>
+         How do I do an online schema change?
+         </question>"
 ```
 
 The streamed response is written to stdout as it arrives. Default model is

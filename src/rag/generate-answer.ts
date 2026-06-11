@@ -3,7 +3,8 @@ import type { MessageParam } from "@/core/messages.ts";
 import type { Retrieved } from "@/rag/types.ts";
 
 const SYSTEM =
-  "You answer questions using ONLY the provided context. Cite chunk numbers " +
+  "You answer the <question> using ONLY the chunks inside <context>. Each " +
+  "chunk is wrapped in a <chunk> tag with an index attribute; cite indices " +
   "inline like [1] or [3]. If the context is insufficient to answer, say so " +
   "explicitly — do not invent facts or use outside knowledge.";
 
@@ -11,9 +12,11 @@ export function buildContext(retrieved: ReadonlyArray<Retrieved>): string {
   return retrieved
     .map(
       (r, i) =>
-        `[${i + 1}] (id=${r.chunk.id}, score=${r.score.toFixed(3)})\n${r.chunk.text}`,
+        `<chunk index="${i + 1}" id="${r.chunk.id}" score="${r.score.toFixed(3)}">
+${r.chunk.text}
+</chunk>`,
     )
-    .join("\n\n---\n\n");
+    .join("\n");
 }
 
 export async function answerWithClaude(
@@ -25,7 +28,13 @@ export async function answerWithClaude(
     onPrompt?: (prompt: { system: string; user: string }) => void;
   },
 ): Promise<string> {
-  const userMessage = `Context:\n\n${buildContext(retrieved)}\n\n---\n\nQuestion: ${query}`;
+  const userMessage = `<context>
+${buildContext(retrieved)}
+</context>
+
+<question>
+${query}
+</question>`;
   if (opts?.onPrompt) opts.onPrompt({ system: SYSTEM, user: userMessage });
   const messages: MessageParam[] = [];
   addUserMessage(messages, userMessage);
