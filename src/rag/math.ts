@@ -3,14 +3,14 @@
  * chunker. Kept in one place so the inner loops stay consistent.
  */
 
-export function dot(a: Float32Array, b: Float32Array): number {
+export function dot(a: Float32Array, b: Float32Array) {
   const len = Math.min(a.length, b.length);
   let s = 0;
   for (let i = 0; i < len; i++) s += (a[i] ?? 0) * (b[i] ?? 0);
   return s;
 }
 
-export function l2Normalize(vec: Float32Array): Float32Array {
+export function l2Normalize(vec: Float32Array) {
   let sumSq = 0;
   for (let i = 0; i < vec.length; i++) {
     const v = vec[i] ?? 0;

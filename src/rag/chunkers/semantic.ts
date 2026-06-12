@@ -4,7 +4,7 @@ import type { Chunk, SemanticConfig } from "@/rag/types.ts";
 
 type Sentence = { text: string; start: number; end: number };
 
-function splitSentences(text: string): Sentence[] {
+function splitSentences(text: string) {
   const re = /[^.!?]+(?:[.!?]+|$)/g;
   const out: Sentence[] = [];
   let m: RegExpExecArray | null;
@@ -16,7 +16,7 @@ function splitSentences(text: string): Sentence[] {
   return out;
 }
 
-function percentile(values: number[], p: number): number {
+function percentile(values: number[], p: number) {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const idx = (p / 100) * (sorted.length - 1);
@@ -30,7 +30,7 @@ function percentile(values: number[], p: number): number {
 function buildSegments(
   sentences: Sentence[],
   breakAfter: Set<number>,
-): Sentence[][] {
+) {
   const segments: Sentence[][] = [];
   let cur: Sentence[] = [];
   for (let i = 0; i < sentences.length; i++) {
@@ -45,7 +45,7 @@ function buildSegments(
   return segments;
 }
 
-function segmentText(seg: Sentence[]): { text: string; start: number; end: number } {
+function segmentText(seg: Sentence[]) {
   const first = seg[0];
   const last = seg[seg.length - 1];
   if (!first || !last) return { text: "", start: 0, end: 0 };
@@ -60,7 +60,7 @@ function mergeAndSplit(
   segments: Sentence[][],
   minChars: number,
   maxChars: number,
-): Sentence[][] {
+) {
   const merged: Sentence[][] = [];
   let buf: Sentence[] = [];
   let bufLen = 0;

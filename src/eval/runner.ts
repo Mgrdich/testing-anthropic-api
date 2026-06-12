@@ -19,7 +19,7 @@ export async function runPromptOnDataset(opts: {
   version: string;
   model?: string;
   force?: boolean;
-}): Promise<{ path: string; count: number; cached: boolean }> {
+}) {
   const outPath = runsPath(opts.name, opts.version);
 
   if (!opts.force && fs.existsSync(outPath)) {

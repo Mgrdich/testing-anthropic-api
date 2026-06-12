@@ -17,7 +17,7 @@ export const BUILTIN_TOOLS: Record<string, Tool> = {
 // available. Add a tool's name here when introducing bash, write_file, etc.
 export const MUTATING_TOOLS: ReadonlySet<string> = new Set<string>([]);
 
-export function selectTools(filter: "all" | readonly string[]): Tool[] {
+export function selectTools(filter: "all" | readonly string[]) {
   if (filter === "all") return Object.values(BUILTIN_TOOLS);
   return filter.map((name) => {
     const tool = BUILTIN_TOOLS[name];

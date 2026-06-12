@@ -53,7 +53,7 @@ const cli = makeCli(USAGE);
 const die: DieFn = cli.die;
 const { getString, getInt } = cli;
 
-async function main(argv: readonly string[]): Promise<void> {
+async function main(argv: readonly string[]) {
   const sub = argv[0];
   if (!sub || sub === "-h" || sub === "--help") {
     process.stdout.write(USAGE);

@@ -9,7 +9,7 @@ export class AnthropicClient {
 
   private constructor() {}
 
-  static init(opts: InitOptions = {}): Anthropic {
+  static init(opts: InitOptions = {}) {
     const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error(
@@ -20,11 +20,11 @@ export class AnthropicClient {
     return AnthropicClient.instance;
   }
 
-  static get(): Anthropic {
+  static get() {
     return AnthropicClient.instance ?? AnthropicClient.init();
   }
 
-  static reset(): void {
+  static reset() {
     AnthropicClient.instance = null;
   }
 }

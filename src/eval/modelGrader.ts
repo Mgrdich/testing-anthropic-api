@@ -29,18 +29,18 @@ exactly this schema:
 }
 `;
 
-const extractJsonObject = (text: string): unknown =>
+const extractJsonObject = (text: string) =>
   extractJsonSpan(text, "{", "}", "no JSON object found in response");
 
 function summarizeIssues(
   issues: { path: PropertyKey[]; message: string }[],
-): string {
+) {
   return issues
     .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
     .join("; ");
 }
 
-function summarizeGradedRows(rows: readonly GradedRow[]): string {
+function summarizeGradedRows(rows: readonly GradedRow[]) {
   const histogram: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   const sampleRationales: string[] = [];
   let totalScore = 0;
@@ -80,7 +80,7 @@ export async function gradeWithModel(opts: {
   version: string;
   model?: string;
   force?: boolean;
-}): Promise<{ path: string; count: number; summary: string; cached: boolean }> {
+}) {
   const outPath = gradedPath(opts.name, opts.version);
 
   if (!opts.force && fs.existsSync(outPath)) {

@@ -8,7 +8,7 @@ type Section = {
   endChar: number;
 };
 
-function parseSections(text: string, maxLevel: number): Section[] {
+function parseSections(text: string, maxLevel: number) {
   const lines = text.split("\n");
   const sections: Section[] = [];
   const path: string[] = [];
@@ -17,7 +17,7 @@ function parseSections(text: string, maxLevel: number): Section[] {
   let offset = 0;
   let inFence = false;
 
-  const flush = (endOffset: number): void => {
+  const flush = (endOffset: number) => {
     const body = buf.join("\n").trim();
     if (body.length > 0) {
       sections.push({
@@ -62,7 +62,7 @@ function parseSections(text: string, maxLevel: number): Section[] {
   return sections;
 }
 
-function splitLargeSection(section: Section, maxChars: number): Section[] {
+function splitLargeSection(section: Section, maxChars: number) {
   if (section.text.length <= maxChars) return [section];
   const parts = section.text.split(/\n\n+/);
   const out: Section[] = [];
@@ -71,7 +71,7 @@ function splitLargeSection(section: Section, maxChars: number): Section[] {
   let inFence = false;
   let runningStart = section.startChar;
 
-  const flush = (): void => {
+  const flush = () => {
     if (cur.length === 0) return;
     const body = cur.join("\n\n").trim();
     if (body.length > 0) {
@@ -101,7 +101,7 @@ function splitLargeSection(section: Section, maxChars: number): Section[] {
   return out;
 }
 
-export function structureChunker(text: string, opts: StructureConfig): Chunk[] {
+export function structureChunker(text: string, opts: StructureConfig) {
   const sections = parseSections(text, opts.maxLevel);
   const hasHeadings = sections.some((s) => s.headingPath.length > 0);
   if (!hasHeadings) {

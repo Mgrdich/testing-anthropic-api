@@ -3,7 +3,7 @@ import type { Retriever, RrfScoredId, ScoredId } from "@/rag/types.ts";
 export function rrf(
   rankings: ReadonlyArray<ReadonlyArray<ScoredId>>,
   k: number = 60,
-): RrfScoredId[] {
+) {
   const acc = new Map<string, number>();
   for (const ranking of rankings) {
     for (let rank = 0; rank < ranking.length; rank++) {
@@ -37,7 +37,7 @@ export async function retrieveHybrid(
   k: number,
   rrfK: number = 60,
   opts?: { onRankings?: (per: ReadonlyArray<HybridRanking>) => void },
-): Promise<RrfScoredId[]> {
+) {
   if (retrievers.length === 0) return [];
   const over = Math.max(k * 3, k);
   const rankings = await Promise.all(retrievers.map((r) => r.search(query, over)));

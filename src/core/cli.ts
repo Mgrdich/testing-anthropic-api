@@ -23,7 +23,7 @@ import { errMsg } from "@/core/util.ts";
  */
 export function runMain(
   main: (argv: readonly string[]) => Promise<void>,
-): void {
+) {
   main(process.argv.slice(2)).catch((err) => {
     process.stderr.write(`error: ${errMsg(err)}\n`);
     process.exit(1);
@@ -49,7 +49,7 @@ export type Flags = {
   flags: Record<string, string | true>;
 };
 
-export function parseArgs(argv: readonly string[]): Flags {
+export function parseArgs(argv: readonly string[]) {
   const out: Flags = { positional: [], flags: {} };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -73,12 +73,12 @@ export function parseArgs(argv: readonly string[]): Flags {
 export function getString(
   flags: Flags["flags"],
   key: string,
-): string | undefined {
+) {
   const v = flags[key];
   return typeof v === "string" ? v : undefined;
 }
 
-export function getBoolFlag(flags: Flags["flags"], key: string): boolean {
+export function getBoolFlag(flags: Flags["flags"], key: string) {
   return flags[key] === true;
 }
 
@@ -130,7 +130,7 @@ export function makeCli(usage: string): Cli {
     key: string,
     fallback: number,
     opts?: IntOpts,
-  ): number => {
+  ) => {
     const v = getString(flags, key);
     if (v === undefined) return fallback;
     const n = Number.parseInt(v, 10);
@@ -149,7 +149,7 @@ export function makeCli(usage: string): Cli {
     key: string,
     fallback: number,
     opts?: FloatOpts,
-  ): number => {
+  ) => {
     const v = getString(flags, key);
     if (v === undefined) return fallback;
     const n = Number.parseFloat(v);
@@ -167,7 +167,7 @@ export function makeCli(usage: string): Cli {
     flags: Flags["flags"],
     key: string,
     fallback: boolean,
-  ): boolean => {
+  ) => {
     const raw = flags[key];
     if (raw === undefined) return fallback;
     if (raw === true) return true;
@@ -182,7 +182,7 @@ export function makeCli(usage: string): Cli {
     key: string,
     allowed: readonly T[],
     fallback: T,
-  ): T => {
+  ) => {
     const v = getString(flags, key) ?? fallback;
     if (!allowed.includes(v as T)) {
       die(`--${key} must be ${allowed.join("|")} (got ${v})`);

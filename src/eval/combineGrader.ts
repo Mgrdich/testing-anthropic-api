@@ -38,7 +38,7 @@ type CombineSummary = {
   errors: number;
 };
 
-function bucket(score: number): number {
+function bucket(score: number) {
   if (score >= 5) return 5;
   if (score < 1) return 1;
   return Math.floor(score);
@@ -58,7 +58,7 @@ function computeCombined(
   code: (CheckResult & { error?: boolean }) | undefined,
   model: ModelGradeOrError | undefined,
   weights: CombineWeights,
-): number | { error: string } {
+) {
   const codeOk = isCodeOk(code);
   const modelOk = isModelOk(model);
   if (codeOk && modelOk) {
@@ -70,7 +70,7 @@ function computeCombined(
   return { error: "no valid scores" };
 }
 
-function summarize(rows: readonly CombinedRow[]): CombineSummary {
+function summarize(rows: readonly CombinedRow[]) {
   const histogram: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   let combinedSum = 0;
   let scored = 0;
@@ -110,12 +110,12 @@ function summarize(rows: readonly CombinedRow[]): CombineSummary {
   };
 }
 
-function formatAvgCode(avg: number | null): string {
+function formatAvgCode(avg: number | null) {
   if (avg === null) return "—";
   return `${avg.toFixed(3)} (on [0,1]; equiv ${(1 + 4 * avg).toFixed(2)} on 1-5)`;
 }
 
-function formatSummary(s: CombineSummary): string {
+function formatSummary(s: CombineSummary) {
   const histLine = [1, 2, 3, 4, 5]
     .map((b) => `${b}:${s.histogram[b] ?? 0}`)
     .join(" ");
@@ -128,15 +128,15 @@ function formatSummary(s: CombineSummary): string {
   ].join("\n");
 }
 
-function escapeCell(s: string): string {
+function escapeCell(s: string) {
   return s.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
-function fullCell(s: string): string {
+function fullCell(s: string) {
   return s.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
 }
 
-function truncateCell(s: string, max = 80): string {
+function truncateCell(s: string, max = 80) {
   const flat = escapeCell(s);
   if (flat.length <= max) return flat;
   return `${flat.slice(0, max - 1)}…`;
@@ -144,26 +144,26 @@ function truncateCell(s: string, max = 80): string {
 
 function formatCodeCell(
   code: (CheckResult & { error?: boolean }) | undefined,
-): string {
+) {
   if (code === undefined) return "—";
   if (code.error === true) return "err";
   return code.score.toFixed(2);
 }
 
-function formatModelCell(model: ModelGradeOrError | undefined): string {
+function formatModelCell(model: ModelGradeOrError | undefined) {
   if (model === undefined) return "—";
   if ("error" in model) return "err";
   return String(model.score);
 }
 
-function formatCombinedCell(combined: CombinedScore): string {
+function formatCombinedCell(combined: CombinedScore) {
   return typeof combined === "number" ? combined.toFixed(2) : "err";
 }
 
 function formatBulletCell(
   model: ModelGradeOrError | undefined,
   pick: (m: Exclude<ModelGradeOrError, { error: string }>) => readonly string[],
-): string {
+) {
   if (model === undefined) return "—";
   if ("error" in model) return "err";
   const items = pick(model);
@@ -171,13 +171,13 @@ function formatBulletCell(
   return items.map((s) => `• ${escapeCell(s)}`).join("<br>");
 }
 
-function formatReasoningCell(model: ModelGradeOrError | undefined): string {
+function formatReasoningCell(model: ModelGradeOrError | undefined) {
   if (model === undefined) return "—";
   if ("error" in model) return "err";
   return escapeCell(model.reasoning);
 }
 
-function renderPerInputTable(rows: readonly CombinedRow[]): string {
+function renderPerInputTable(rows: readonly CombinedRow[]) {
   const header =
     "| # | Input | Output | Code | Model | Combined | Strengths | Weaknesses | Reasoning |";
   const sep = "|---|---|---|---|---|---|---|---|---|";
@@ -194,7 +194,7 @@ function renderMarkdown(
   weights: CombineWeights,
   s: CombineSummary,
   rows: readonly CombinedRow[],
-): string {
+) {
   const histLine = [1, 2, 3, 4, 5]
     .map((b) => `${b}:${s.histogram[b] ?? 0}`)
     .join(" ");
@@ -222,11 +222,11 @@ function renderMarkdown(
 function parseRowsFromFile<T>(
   filePath: string,
   parse: (row: unknown, i: number) => T,
-): T[] {
+) {
   return readJsonl(filePath).map((row, i) => parse(row, i));
 }
 
-function mtimeMs(p: string): number | null {
+function mtimeMs(p: string) {
   if (!fs.existsSync(p)) return null;
   return fs.statSync(p).mtimeMs;
 }
@@ -237,7 +237,7 @@ function mtimeMs(p: string): number | null {
 function isCombinedFresh(
   outPath: string,
   inputPaths: readonly string[],
-): boolean {
+) {
   const outMtime = mtimeMs(outPath);
   if (outMtime === null) return false;
   for (const p of inputPaths) {
@@ -254,13 +254,7 @@ export async function combineGrader(opts: {
   markdown?: boolean;
   auto?: boolean;
   force?: boolean;
-}): Promise<{
-  path: string;
-  mdPath?: string;
-  count: number;
-  summary: string;
-  cached: boolean;
-}> {
+}) {
   const weights = opts.weights ?? { code: 0.5, model: 0.5 };
   const rPath = runsPath(opts.name, opts.version);
   const gPath = gradedPath(opts.name, opts.version);

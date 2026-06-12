@@ -6,20 +6,20 @@ export class VectorStore {
   private vectors: Float32Array[] = [];
   private ids: string[] = [];
 
-  add(id: string, vec: Float32Array): void {
+  add(id: string, vec: Float32Array) {
     this.ids.push(id);
     this.vectors.push(vec);
   }
 
-  addBatch(items: ReadonlyArray<{ id: string; vec: Float32Array }>): void {
+  addBatch(items: ReadonlyArray<{ id: string; vec: Float32Array }>) {
     for (const it of items) this.add(it.id, it.vec);
   }
 
-  get size(): number {
+  get size() {
     return this.ids.length;
   }
 
-  search(queryVec: Float32Array, k: number): ScoredId[] {
+  search(queryVec: Float32Array, k: number) {
     const n = this.vectors.length;
     if (n === 0 || k <= 0) return [];
     const scores: ScoredId[] = new Array(n);
@@ -43,16 +43,16 @@ export class VectorRetriever implements Retriever {
     this.embedder = embedder ?? Embedder.get();
   }
 
-  get size(): number {
+  get size() {
     return this.store.size;
   }
 
-  async add(id: string, text: string): Promise<void> {
+  async add(id: string, text: string) {
     const vec = await this.embedder.embed(text);
     this.store.add(id, vec);
   }
 
-  async addBatch(items: ReadonlyArray<{ id: string; text: string }>): Promise<void> {
+  async addBatch(items: ReadonlyArray<{ id: string; text: string }>) {
     if (items.length === 0) return;
     const vecs = await this.embedder.embedBatch(items.map((it) => it.text));
     const pairs: Array<{ id: string; vec: Float32Array }> = [];
@@ -65,7 +65,7 @@ export class VectorRetriever implements Retriever {
     this.store.addBatch(pairs);
   }
 
-  async search(query: string, k: number): Promise<ScoredId[]> {
+  async search(query: string, k: number) {
     const qVec = await this.embedder.embed(query);
     return this.store.search(qVec, k);
   }

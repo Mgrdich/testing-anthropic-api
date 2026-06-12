@@ -24,14 +24,14 @@ const GEN_MAX_TOKENS = 4096;
 const GEN_PREFILL = "```json\n[";
 const GEN_STOP = "]\n```";
 
-const extractJsonArray = (text: string): unknown =>
+const extractJsonArray = (text: string) =>
   extractJsonSpan(text, "[", "]", "model did not return a JSON array");
 
 export async function generateDataset(opts: {
   name: string;
   count: number;
   force: boolean;
-}): Promise<{ path: string; count: number }> {
+}) {
   const outPath = datasetPath(opts.name);
   if (fs.existsSync(outPath) && !opts.force) {
     throw new Error(

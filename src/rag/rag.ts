@@ -16,7 +16,7 @@ import type {
 
 const dbg = Debug.get();
 
-function formatRanking(ranking: ReadonlyArray<ScoredId>): string {
+function formatRanking(ranking: ReadonlyArray<ScoredId>) {
   return ranking
     .map((r, i) => `  ${i + 1}. ${r.id} score=${r.score.toFixed(4)}`)
     .join("\n");
@@ -61,7 +61,7 @@ export type RunRagOutput = {
   };
 };
 
-export async function runRag(input: RunRagInput): Promise<RunRagOutput> {
+export async function runRag(input: RunRagInput) {
   const k = input.k ?? 5;
   const mode: RetrievalMode = input.retrieval ?? "hybrid";
   const shouldGenerate = input.generate ?? true;

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export function readJsonl(filePath: string): unknown[] {
+export function readJsonl(filePath: string) {
   const raw = fs.readFileSync(filePath, "utf8");
   const rows: unknown[] = [];
   for (const line of raw.split("\n")) {
@@ -12,13 +12,13 @@ export function readJsonl(filePath: string): unknown[] {
   return rows;
 }
 
-export function writeJsonl<T>(filePath: string, rows: readonly T[]): void {
+export function writeJsonl<T>(filePath: string, rows: readonly T[]) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const body = rows.map((r) => JSON.stringify(r)).join("\n");
   fs.writeFileSync(filePath, rows.length > 0 ? body + "\n" : "");
 }
 
-export function appendJsonl<T>(filePath: string, row: T): void {
+export function appendJsonl<T>(filePath: string, row: T) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.appendFileSync(filePath, JSON.stringify(row) + "\n");
 }

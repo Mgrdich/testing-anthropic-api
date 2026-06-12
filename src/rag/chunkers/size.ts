@@ -5,7 +5,7 @@ function findBoundary(
   lo: number,
   hi: number,
   splitOn: SizeConfig["splitOn"],
-): number {
+) {
   if (splitOn === "char") return hi;
   const slice = text.slice(lo, hi);
   if (splitOn === "paragraph") {
@@ -27,7 +27,7 @@ function findBoundary(
   return hi;
 }
 
-export function sizeChunker(text: string, opts: SizeConfig): Chunk[] {
+export function sizeChunker(text: string, opts: SizeConfig) {
   const { maxChars, overlapChars, splitOn } = opts;
   const chunks: Chunk[] = [];
   const lookbackStart = Math.floor(maxChars * 0.8);

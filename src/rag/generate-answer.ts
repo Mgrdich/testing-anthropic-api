@@ -8,7 +8,7 @@ const SYSTEM =
   "inline like [1] or [3]. If the context is insufficient to answer, say so " +
   "explicitly — do not invent facts or use outside knowledge.";
 
-export function buildContext(retrieved: ReadonlyArray<Retrieved>): string {
+export function buildContext(retrieved: ReadonlyArray<Retrieved>) {
   return retrieved
     .map(
       (r, i) =>
@@ -27,7 +27,7 @@ export async function answerWithClaude(
     onText?: (delta: string) => void;
     onPrompt?: (prompt: { system: string; user: string }) => void;
   },
-): Promise<string> {
+) {
   const userMessage = `<context>
 ${buildContext(retrieved)}
 </context>

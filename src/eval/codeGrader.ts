@@ -18,13 +18,13 @@ const CodeEvalModuleSchema = z.object({
   }),
 });
 
-function summarizeZodIssues(issues: { path: PropertyKey[]; message: string }[]): string {
+function summarizeZodIssues(issues: { path: PropertyKey[]; message: string }[]) {
   return issues
     .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
     .join("; ");
 }
 
-function summarizeCodeRows(rows: readonly CodeRow[]): string {
+function summarizeCodeRows(rows: readonly CodeRow[]) {
   let perfect = 0;
   let zero = 0;
   let errors = 0;
@@ -45,9 +45,7 @@ export async function gradeWithCode(opts: {
   name: string;
   version: string;
   force?: boolean;
-}): Promise<
-  { path: string; count: number; summary: string; cached: boolean } | null
-> {
+}) {
   const outPath = codePath(opts.name, opts.version);
 
   if (!opts.force && fs.existsSync(outPath)) {

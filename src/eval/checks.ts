@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { CheckFn, CheckResult, DatasetItem } from "@/eval/types.ts";
 import { errMsg } from "@/core/index.ts";
 
-export function stripCodeFence(s: string): string {
+export function stripCodeFence(s: string) {
   const trimmed = s.trim();
   const fenced = /^```(?:[a-zA-Z0-9_-]+)?\s*\n([\s\S]*?)\n?```$/m.exec(trimmed);
   return fenced && fenced[1] !== undefined ? fenced[1].trim() : trimmed;
@@ -11,8 +11,8 @@ export function stripCodeFence(s: string): string {
 export function zodCheck<S extends z.ZodTypeAny>(
   schema: S,
   opts: { stripFence?: boolean } = {},
-): CheckFn {
-  return (output: string): CheckResult => {
+) {
+  return (output: string) => {
     const text = opts.stripFence ? stripCodeFence(output) : output;
     let parsed: unknown;
     try {
@@ -36,7 +36,7 @@ export function zodCheck<S extends z.ZodTypeAny>(
   };
 }
 
-export const jsonCheck: CheckFn = (output: string): CheckResult => {
+export const jsonCheck: CheckFn = (output: string) => {
   try {
     JSON.parse(output);
     return { score: 1 };
@@ -45,7 +45,7 @@ export const jsonCheck: CheckFn = (output: string): CheckResult => {
   }
 };
 
-export const regexCheck: CheckFn = (output: string): CheckResult => {
+export const regexCheck: CheckFn = (output: string) => {
   try {
     new RegExp(output);
     return { score: 1 };
@@ -54,9 +54,9 @@ export const regexCheck: CheckFn = (output: string): CheckResult => {
   }
 };
 
-export function allChecks(map: Record<string, CheckFn>): CheckFn {
+export function allChecks(map: Record<string, CheckFn>) {
   const entries = Object.entries(map);
-  return (output: string, item: DatasetItem): CheckResult => {
+  return (output: string, item: DatasetItem) => {
     const details: Record<string, CheckResult> = {};
     let passing = 0;
     const failed: string[] = [];

@@ -12,7 +12,7 @@ export async function chunk(
   text: string,
   config: ChunkerConfig,
   embedder?: Embedder,
-): Promise<Chunk[]> {
+) {
   switch (config.strategy) {
     case "size":
       return sizeChunker(text, config);

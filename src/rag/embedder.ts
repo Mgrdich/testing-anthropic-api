@@ -11,12 +11,12 @@ export class Embedder {
 
   private constructor() {}
 
-  static get(): Embedder {
+  static get() {
     if (!Embedder.instance) Embedder.instance = new Embedder();
     return Embedder.instance;
   }
 
-  async ensureReady(): Promise<void> {
+  async ensureReady() {
     if (this.pipeline) return;
     process.stderr.write(
       `[embedder] loading ${this.modelId} (cached to ~/.cache/huggingface; ~25MB on first run)\n`,
@@ -25,7 +25,7 @@ export class Embedder {
     this.pipeline = await pipeline("feature-extraction", this.modelId);
   }
 
-  async embed(text: string): Promise<Float32Array> {
+  async embed(text: string) {
     await this.ensureReady();
     if (!this.pipeline) throw new Error("embedder pipeline not initialized");
     const out = await this.pipeline(text, { pooling: "mean", normalize: true });
@@ -33,7 +33,7 @@ export class Embedder {
     return l2Normalize(new Float32Array(data));
   }
 
-  async embedBatch(texts: string[]): Promise<Float32Array[]> {
+  async embedBatch(texts: string[]) {
     if (texts.length === 0) return [];
     await this.ensureReady();
     if (!this.pipeline) throw new Error("embedder pipeline not initialized");

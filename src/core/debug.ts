@@ -12,7 +12,7 @@
 
 type Lazy<T> = T | (() => T);
 
-function force<T>(v: Lazy<T>): T {
+function force<T>(v: Lazy<T>) {
   return typeof v === "function" ? (v as () => T)() : v;
 }
 
@@ -21,7 +21,7 @@ const SEPARATOR = `${"-".repeat(60)}\n`;
 export class Debug {
   private static instance: Debug | null = null;
 
-  static get(): Debug {
+  static get() {
     if (!Debug.instance) Debug.instance = new Debug();
     
     return Debug.instance;
@@ -33,22 +33,22 @@ export class Debug {
    * Readable for the rare site where debug changes behavior rather than
    * emitting a trace (e.g. showing full tool results instead of previews).
    */
-  get enabled(): boolean {
+  get enabled() {
     return this.on;
   }
 
-  enable(): void {
+  enable() {
     this.on = true;
   }
 
   /** One-line `[debug] …` trace. */
-  log(msg: Lazy<string>): void {
+  log(msg: Lazy<string>) {
     if (!this.on) return;
     process.stderr.write(`[debug] ${force(msg)}\n`);
   }
 
   /** Framed multi-line text block: `[debug] label:` … `[debug] /label`. */
-  block(label: string, body: Lazy<string>): void {
+  block(label: string, body: Lazy<string>) {
     if (!this.on) return;
     process.stderr.write(
       `[debug] ${label}:\n${force(body)}\n[debug] /${label}\n`,
@@ -56,7 +56,7 @@ export class Debug {
   }
 
   /** Separator-framed pretty-printed JSON payload. */
-  json(label: string, payload: Lazy<unknown>): void {
+  json(label: string, payload: Lazy<unknown>) {
     if (!this.on) return;
     process.stderr.write(`\n${SEPARATOR}`);
     process.stderr.write(

@@ -130,7 +130,7 @@ function writeIfAbsent(filePath: string, content: string): "wrote" | "skipped" {
 export function createPromptScaffold(
   name: string,
   opts: { check: CheckTemplate } = { check: "none" },
-): { wrote: string[]; skipped: string[] } {
+) {
   const dir = promptDir(name);
   fs.mkdirSync(dir, { recursive: true });
 

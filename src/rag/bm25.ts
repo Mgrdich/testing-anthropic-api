@@ -8,7 +8,7 @@ const STOPWORDS = new Set([
   "than", "then", "these", "those",
 ]);
 
-export function tokenize(s: string): string[] {
+export function tokenize(s: string) {
   return s
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
@@ -35,11 +35,11 @@ export class BM25Index {
     this.b = opts?.b ?? 0.75;
   }
 
-  get size(): number {
+  get size() {
     return this.docs.length;
   }
 
-  add(id: string, text: string): void {
+  add(id: string, text: string) {
     const tokens = tokenize(text);
     const tf = new Map<string, number>();
     for (const t of tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
@@ -58,7 +58,7 @@ export class BM25Index {
     this.avgDocLen = total / this.docs.length;
   }
 
-  search(query: string, k: number): ScoredId[] {
+  search(query: string, k: number) {
     if (this.docs.length === 0 || k <= 0) return [];
     const qTerms = tokenize(query);
     if (qTerms.length === 0) return [];
@@ -98,19 +98,19 @@ export class BM25Retriever implements Retriever {
     this.index = new BM25Index(opts);
   }
 
-  get size(): number {
+  get size() {
     return this.index.size;
   }
 
-  async add(id: string, text: string): Promise<void> {
+  async add(id: string, text: string) {
     this.index.add(id, text);
   }
 
-  async addBatch(items: ReadonlyArray<{ id: string; text: string }>): Promise<void> {
+  async addBatch(items: ReadonlyArray<{ id: string; text: string }>) {
     for (const it of items) this.index.add(it.id, it.text);
   }
 
-  async search(query: string, k: number): Promise<ScoredId[]> {
+  async search(query: string, k: number) {
     return this.index.search(query, k);
   }
 }

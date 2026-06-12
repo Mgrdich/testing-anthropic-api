@@ -13,7 +13,7 @@ const SYSTEM = [
   "relevant, bullet lists, and tight technical voice.",
 ].join(" ");
 
-function buildPrompt(topic: HandbookTopic): string {
+function buildPrompt(topic: HandbookTopic) {
   const outline = topic.h2Outline.map((h) => `  - ${h}`).join("\n");
   return [
     `Write the "${topic.title}" section of a software engineering handbook.`,
@@ -44,7 +44,7 @@ export type GenerateDocResult = {
 
 export async function generateSyntheticDoc(
   input: GenerateDocInput,
-): Promise<GenerateDocResult> {
+) {
   const model = input.model ?? DEFAULT_DOC_MODEL;
   const wanted = input.sections ?? TOPICS.length;
   const topics = TOPICS.slice(0, Math.min(wanted, TOPICS.length));

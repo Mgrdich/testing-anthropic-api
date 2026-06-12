@@ -13,7 +13,7 @@ export type StreamAssistantOptions = Partial<
   Omit<Anthropic.MessageStreamParams, "messages">
 >;
 
-export function addUserMessage(messages: MessageParam[], text: string): void {
+export function addUserMessage(messages: MessageParam[], text: string) {
   messages.push({ role: "user", content: text });
 }
 
@@ -22,7 +22,7 @@ export function addUserMessage(messages: MessageParam[], text: string): void {
  * single string. Non-text blocks (tool_use, etc.) are ignored. For
  * single-block responses this is equivalent to `content[0].text`.
  */
-export function extractText(content: Anthropic.Message["content"]): string {
+export function extractText(content: Anthropic.Message["content"]) {
   const parts: string[] = [];
   for (const block of content) {
     if (block.type === "text") parts.push(block.text);
@@ -42,7 +42,7 @@ function withPrefill(
 function mergePrefillIntoContent(
   prefill: string,
   content: Anthropic.Message["content"],
-): Anthropic.Message["content"] {
+) {
   const first = content[0];
   if (!first || first.type !== "text") return content;
   return [{ ...first, text: prefill + first.text }, ...content.slice(1)];
@@ -52,7 +52,7 @@ export async function addAssistantMessage(
   messages: MessageParam[],
   opts: AddAssistantOptions = {},
   prefill?: string,
-): Promise<Anthropic.Message> {
+) {
   const response = await AnthropicClient.get().messages.create({
     model: DEFAULT_MODEL,
     max_tokens: DEFAULT_MAX_TOKENS,
@@ -72,7 +72,7 @@ export async function streamAssistantMessage(
   opts: StreamAssistantOptions = {},
   onStream?: (stream: MessageStream) => void,
   prefill?: string,
-): Promise<Anthropic.Message> {
+) {
   const stream = AnthropicClient.get().messages.stream({
     model: DEFAULT_MODEL,
     max_tokens: DEFAULT_MAX_TOKENS,
