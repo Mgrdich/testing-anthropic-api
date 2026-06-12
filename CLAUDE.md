@@ -10,6 +10,9 @@ bun run dev [prompt]   # run from source (TTY → REPL, piped stdin → single-s
 bun run typecheck      # tsc --noEmit, strict mode
 bun run build          # bundle to dist/index.js (target: bun, minified)
 bun run start [prompt] # run the bundled output
+bun run mcp --debug    # MCP demo: spawns the stdio server, exercises tools/prompts/resources
+                       # (--debug recommended: section headers are Debug traces on stderr)
+bun run mcp:server     # run the MCP server standalone (for inspector tooling)
 ```
 
 There is no test suite. `bun run typecheck` is the only correctness gate — run it
@@ -19,7 +22,10 @@ after any edit.
 
 ## Architecture
 
-Two modules under `src/`:
+The two core modules under `src/` (the others — `mcp/`, `eval/`, `rag/` —
+have their own docs: `src/mcp/CLAUDE.md`, `src/eval/CLAUDE.md`,
+`src/rag/README.md`; `cli/` and `core/` do too: `src/cli/CLAUDE.md`,
+`src/core/CLAUDE.md`):
 
 - **`cli/`** owns terminal concerns: arg parsing (`args.ts`), the readline
   conversation loop (`repl.ts`), piped stdin reading (`stdin.ts`), and the
@@ -45,7 +51,8 @@ Two modules under `src/`:
 Debug tracing is a process-global singleton, `Debug.get()` in
 `core/debug.ts` (same lazy-singleton shape as `Embedder.get()`). Each CLI
 calls `.enable()` once when it parses `--debug`; call sites then trace
-unconditionally via `dbg.log` / `dbg.block` / `dbg.json` — the enabled
+unconditionally via `dbg.log` / `dbg.section` / `dbg.block` /
+`dbg.json` — the enabled
 check lives inside the methods, so no `if (debug)` guards at call sites.
 Pass expensive trace bodies as thunks (only evaluated when enabled), and
 read `dbg.enabled` only where debug changes behavior rather than emitting
@@ -112,9 +119,55 @@ With `--debug`, the agentic loop emits framed `[debug] agentic round`,
 addition to the existing `stream event` frames (which include
 `input_json_delta` for tool inputs as they're built up).
 
-MCP integration is still planned but not yet scaffolded — same shape:
-belongs in `core/` (likely a sibling `mcp/` module) so it can be reused
-by non-CLI callers.
+### MCP (`src/mcp/`)
+
+MCP landed as a top-level module (sibling of `cli/`/`core/`, superseding
+the earlier "sibling module in core/" note; see `src/mcp/CLAUDE.md` for
+the module doc):
+
+- **`server.ts`** is a standalone stdio MCP server built with
+  `@modelcontextprotocol/sdk` (`McpServer` + `StdioServerTransport`),
+  grounded in the repo's gitignored `docs/` folder (populated by the rag
+  walkthrough; missing/empty is handled gracefully). It exposes two
+  non-mutating tools (`list_docs`, `read_doc` — names chosen not to
+  collide with the built-ins; `read_doc` refuses paths that escape
+  `docs/`), an XML-tagged `explain_topic` prompt, and a `docs://{+path}`
+  resource template whose `list` callback enumerates every file in
+  `docs/` and whose read callback serves one item. It must never write
+  to stdout (that's the JSON-RPC stream) and deliberately does not
+  import `@/core` (no API key needed).
+- **`client.ts`** spawns the server as a child process
+  (`bun run src/mcp/server.ts` via `StdioClientTransport`) and connects
+  with a 10s handshake timeout. Startup failure throws `McpConnectError`
+  (the CLI prints it and exits 1); mid-session death flips
+  `McpConnection.alive` and prints a one-time stderr warning.
+- **Conversion to Claude types is the Anthropic SDK's job** — the
+  `@anthropic-ai/sdk/helpers/beta/mcp` helpers, not hand-rolled mapping:
+  `mcpTools` (tools → `BetaRunnableTool`s, adapted to the local `Tool`
+  shape in `tools.ts` so both runners work unchanged), `mcpMessages`
+  (prompts → message params, `prompts.ts`), and `mcpResourceToContent`
+  (resources → content blocks, `resources.ts`; note `text/*` resources
+  become *document* blocks with a text source — use `resourceBlockText`
+  to extract). The MCP SDK `Client` doesn't structurally satisfy
+  `MCPClientLike` (its `callTool` return union includes a legacy shape);
+  the guard-then-convert step lives in one util, `mcpRunnableTools()` in
+  `tools.ts` (narrows via the `isMcpClientLike()` type guard, then calls
+  the SDK's `mcpTools()`), shared by `loadMcpTools` and `cli.ts` — never
+  a cast.
+- **CLI**: `--mcp` connects at startup and merges the server's tools
+  into the agentic loop (works with both `--runner` values, combines
+  with `--tools`; duplicate tool names throw). In `sendTurn`, a leading
+  `/` invokes an MCP prompt (`/prompts` lists them,
+  `/explain_topic topic="…" audience="…"` appends the prompt's messages
+  to history), and `@<docs file>` mentions (bare path like
+  `@northvale-tunnel-collapse.md` or full `docs://…` URI) fetch
+  resources and attach them as XML-tagged (`<resource uri="…">`) content
+  blocks ahead of the user text. The connection is closed in a `finally`
+  in `runCli`.
+- **`cli.ts`** (`bun run mcp`) showcases the helpers natively against
+  the live API: prompt → `mcpMessages` → `beta.messages.create`,
+  resource → `mcpResourceToContent` → an XML-tagged turn, and
+  `mcpTools` → `beta.messages.toolRunner`.
 
 ## TypeScript conventions enforced by `tsconfig.json`
 

@@ -47,6 +47,14 @@ export class Debug {
     process.stderr.write(`[debug] ${force(msg)}\n`);
   }
 
+  /** Separator-framed section header: a rule above and below the title. */
+  section(title: Lazy<string>) {
+    if (!this.on) return;
+    process.stderr.write(
+      `\n${SEPARATOR}[debug] section: ${force(title)}\n${SEPARATOR}`,
+    );
+  }
+
   /** Framed multi-line text block: `[debug] label:` … `[debug] /label`. */
   block(label: string, body: Lazy<string>) {
     if (!this.on) return;

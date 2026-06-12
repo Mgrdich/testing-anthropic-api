@@ -15,9 +15,10 @@ export type Args = {
   tools?: "all" | string[];
   maxIterations?: number;
   runner?: "local" | "sdk";
+  mcp: boolean;
 };
 
-export function printHelp(): void {
+export function printHelp() {
   process.stdout.write(
     `Usage: testing-anthropic [options] [prompt]
 
@@ -44,6 +45,13 @@ Options:
   --runner <name>     Pick the tool-use loop: 'local' (default) uses our
                       hand-rolled runAgenticTurn; 'sdk' uses Anthropic's
                       client.beta.messages.toolRunner.
+  --mcp               Spawn the bundled MCP server (stdio) and expose its
+                      tools to the model. Combines with --tools; alone, it
+                      enables the agentic loop with MCP tools only. In the
+                      REPL: /prompts lists MCP prompts, /<name> key=value
+                      invokes one, and @<resource> (a docs/ file, e.g.
+                      @northvale-tunnel-collapse.md or a docs:// URI)
+                      attaches it to the turn.
   -h, --help          Show this help
 
 Environment:
@@ -52,7 +60,7 @@ Environment:
   );
 }
 
-export function parseArgs(argv: readonly string[]): Args {
+export function parseArgs(argv: readonly string[]) {
   const out: Args = {
     model: DEFAULT_MODEL,
     maxTokens: DEFAULT_MAX_TOKENS,
@@ -60,6 +68,7 @@ export function parseArgs(argv: readonly string[]): Args {
     once: false,
     debug: false,
     stream: false,
+    mcp: false,
   };
   const positional: string[] = [];
 
@@ -78,6 +87,9 @@ export function parseArgs(argv: readonly string[]): Args {
         break;
       case "--stream":
         out.stream = true;
+        break;
+      case "--mcp":
+        out.mcp = true;
         break;
       case "--model": {
         const v = argv[++i];

@@ -1,9 +1,14 @@
-import { Debug, errMsg, type MessageParam } from "@/core/index.ts";
+import { Debug, errMsg, type MessageParam, type Tool } from "@/core/index.ts";
+import {
+  connectLocalMcp,
+  loadMcpTools,
+  type McpConnection,
+} from "@/mcp/index.ts";
 import { type Args, parseArgs, printHelp } from "@/cli/args.ts";
 import { runRepl, sendTurn } from "@/cli/repl.ts";
 import { readStdin } from "@/cli/stdin.ts";
 
-export async function runCli(argv: readonly string[]): Promise<void> {
+export async function runCli(argv: readonly string[]) {
   let args: Args;
   try {
     args = parseArgs(argv);
@@ -20,27 +25,48 @@ export async function runCli(argv: readonly string[]): Promise<void> {
 
   if (args.debug) Debug.get().enable();
 
-  const messages: MessageParam[] = [];
-
-  const initial = args.prompt ?? (await readStdin());
-  if (initial) {
-    await sendTurn({ messages, args, text: initial });
-  }
-
-  // No REPL if stdin isn't interactive or the user asked for a single shot.
-  if (!process.stdin.isTTY || args.once) {
-    if (args.once && !initial) {
-      process.stderr.write(
-        "error: --once requires a prompt (positional argument or piped stdin)\n",
-      );
-      process.exit(2);
+  // --mcp was an explicit ask: if the server won't start, fail loudly rather
+  // than silently degrading to a tool-less session.
+  let mcp: McpConnection | undefined;
+  let mcpTools: Tool[] | undefined;
+  if (args.mcp) {
+    try {
+      mcp = await connectLocalMcp();
+      mcpTools = await loadMcpTools(mcp.client);
+    } catch (err) {
+      await mcp?.close().catch(() => {});
+      process.stderr.write(`error: failed to start MCP server: ${errMsg(err)}\n`);
+      process.exit(1);
     }
-    return;
   }
 
-  await runRepl({
-    messages,
-    args,
-    hadInitialTurn: Boolean(initial),
-  });
+  try {
+    const messages: MessageParam[] = [];
+
+    const initial = args.prompt ?? (await readStdin());
+    if (initial) {
+      await sendTurn({ messages, args, text: initial, mcp, mcpTools });
+    }
+
+    // No REPL if stdin isn't interactive or the user asked for a single shot.
+    if (!process.stdin.isTTY || args.once) {
+      if (args.once && !initial) {
+        process.stderr.write(
+          "error: --once requires a prompt (positional argument or piped stdin)\n",
+        );
+        process.exit(2);
+      }
+      return;
+    }
+
+    await runRepl({
+      messages,
+      args,
+      hadInitialTurn: Boolean(initial),
+      mcp,
+      mcpTools,
+    });
+  } finally {
+    await mcp?.close();
+  }
 }

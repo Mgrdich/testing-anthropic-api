@@ -11,6 +11,8 @@
     "dev": "bun run src/index.ts",
     "eval": "bun run src/eval/cli.ts",
     "rag": "bun run src/rag/cli.ts",
+    "mcp": "bun run src/mcp/cli.ts",
+    "mcp:server": "bun run src/mcp/server.ts",
     "build": "bun build src/index.ts --outdir dist --target bun --minify",
     "start": "bun run dist/index.js",
     "typecheck": "tsc --noEmit"
@@ -18,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
     "@huggingface/transformers": "^4.2.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
