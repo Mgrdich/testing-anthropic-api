@@ -14,7 +14,12 @@ import {
 import type { McpConnection } from "@/mcp/index.ts";
 import type { Args } from "@/cli/args.ts";
 import { buildAgenticHooks } from "@/cli/hooks.ts";
-import { buildMentionContent, handleMcpSlash } from "@/cli/mcp-turn.ts";
+import {
+  buildMentionContent,
+  handleMcpPrompt,
+  MENTION_PREFIX,
+  PROMPT_PREFIX,
+} from "@/cli/mcp-turn.ts";
 
 const dbg = Debug.get();
 
@@ -28,8 +33,8 @@ type TurnOpts = {
 };
 
 export async function sendTurn(opts: TurnOpts) {
-  if (opts.mcp && opts.text.startsWith("/")) {
-    const queued = await handleMcpSlash(opts.mcp, opts.text, opts.messages);
+  if (opts.mcp && opts.text.startsWith(PROMPT_PREFIX)) {
+    const queued = await handleMcpPrompt(opts.mcp, opts.text, opts.messages);
     if (!queued) return;
   } else if (opts.mcp) {
     const content = await buildMentionContent(opts.mcp, opts.text);
@@ -157,7 +162,7 @@ export async function runRepl(opts: ReplOpts) {
   );
   if (opts.mcp) {
     process.stdout.write(
-      "MCP connected: /prompts lists prompts, /<name> key=value invokes one, @<resource> attaches a resource.\n",
+      `MCP connected: ${PROMPT_PREFIX}prompts lists prompts, ${PROMPT_PREFIX}<name> key=value invokes one, ${MENTION_PREFIX}<resource> attaches a resource.\n`,
     );
   }
 

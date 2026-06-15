@@ -9,7 +9,7 @@ export type McpPromptInfo = {
   args: string[];
 };
 
-/** List the server's prompts (for `/prompts` and slash-command validation). */
+/** List the server's prompts (for `#prompts` and prompt-command validation). */
 export async function listMcpPrompts(client: Client) {
   const { prompts } = await client.listPrompts();
   return prompts.map((p) => ({

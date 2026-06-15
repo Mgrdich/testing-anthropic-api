@@ -7,7 +7,17 @@ import {
   type McpConnection,
 } from "@/mcp/index.ts";
 
-/** Parse `key=value key="multi word"` pairs from a slash-command tail. */
+/**
+ * Sigils that route a REPL line to MCP turn construction. `#` invokes a
+ * server prompt, `@` mentions a resource. Both are single, regex-safe
+ * characters; `/` is intentionally left free for future REPL commands.
+ * Change them here — every behavioral and user-facing string derives from
+ * these.
+ */
+export const PROMPT_PREFIX = "#";
+export const MENTION_PREFIX = "@";
+
+/** Parse `key=value key="multi word"` pairs from a prompt-command tail. */
 function parsePromptArgs(rest: string) {
   const args: Record<string, string> = {};
   const re = /(\w+)=(?:"([^"]*)"|'([^']*)'|(\S+))/g;
@@ -20,18 +30,21 @@ function parsePromptArgs(rest: string) {
 }
 
 /**
- * Handle a `/...` line as an MCP prompt invocation. `/prompts` (or `/help`)
- * lists what the server offers; `/<name> key=value …` fetches the prompt and
+ * Handle a `#...` line as an MCP prompt invocation. `#prompts` (or `#help`)
+ * lists what the server offers; `#<name> key=value …` fetches the prompt and
  * appends its (already XML-tagged) messages to the history. Returns true when
  * a turn was queued and the caller should proceed to the API request.
+ *
+ * `#` is the prompt prefix; `/` is left free for future REPL commands.
  */
-export async function handleMcpSlash(
+export async function handleMcpPrompt(
   mcp: McpConnection,
   text: string,
   messages: MessageParam[],
 ) {
   const space = text.indexOf(" ");
-  const name = (space === -1 ? text.slice(1) : text.slice(1, space)).trim();
+  const body = space === -1 ? text : text.slice(0, space);
+  const name = body.slice(PROMPT_PREFIX.length).trim();
   const rest = space === -1 ? "" : text.slice(space + 1).trim();
 
   if (!mcp.alive) {
@@ -42,11 +55,13 @@ export async function handleMcpSlash(
   try {
     if (name === "prompts" || name === "help" || name === "") {
       const prompts = await listMcpPrompts(mcp.client);
-      process.stderr.write("MCP prompts (invoke with /<name> key=value …):\n");
+      process.stderr.write(
+        `MCP prompts (invoke with ${PROMPT_PREFIX}<name> key=value …):\n`,
+      );
       for (const p of prompts) {
         const argList = p.args.map((a) => `${a}=…`).join(" ");
         const desc = p.description ? ` — ${p.description}` : "";
-        process.stderr.write(`  /${p.name} ${argList}${desc}\n`);
+        process.stderr.write(`  ${PROMPT_PREFIX}${p.name} ${argList}${desc}\n`);
       }
       return false;
     }
@@ -57,13 +72,17 @@ export async function handleMcpSlash(
       parsePromptArgs(rest),
     );
     if (promptMessages.length === 0) {
-      process.stderr.write(`error: MCP prompt '/${name}' returned no messages\n`);
+      process.stderr.write(
+        `error: MCP prompt '${PROMPT_PREFIX}${name}' returned no messages\n`,
+      );
       return false;
     }
     messages.push(...promptMessages);
     return true;
   } catch (err) {
-    process.stderr.write(`error: MCP prompt '/${name}' failed: ${errMsg(err)}\n`);
+    process.stderr.write(
+      `error: MCP prompt '${PROMPT_PREFIX}${name}' failed: ${errMsg(err)}\n`,
+    );
     return false;
   }
 }
@@ -71,9 +90,12 @@ export async function handleMcpSlash(
 // Either a full URI (docs://path/to/doc.md) or a bare name/path. The bare
 // form allows dotted extensions but must end on an alphanumeric run after
 // the dot, so a sentence-final "@doc.md." captures "doc.md" without the
-// trailing period.
-const MENTION_RE =
-  /@([A-Za-z0-9_-]+:\/\/[^\s]+|[A-Za-z0-9/_-]+(?:\.[A-Za-z0-9]+)*)/g;
+// trailing period. Built from MENTION_PREFIX (a regex-safe single char) so
+// the sigil stays a single source of truth.
+const MENTION_RE = new RegExp(
+  `${MENTION_PREFIX}([A-Za-z0-9_-]+://[^\\s]+|[A-Za-z0-9/_-]+(?:\\.[A-Za-z0-9]+)*)`,
+  "g",
+);
 
 /**
  * Build the user-turn content for a line that may carry `@resource`
@@ -119,7 +141,7 @@ export async function buildMentionContent(
       process.stderr.write(`[mcp] attached resource ${uri}\n`);
     } catch (err) {
       process.stderr.write(
-        `warning: could not fetch MCP resource '@${ref}': ${errMsg(err)}\n`,
+        `warning: could not fetch MCP resource '${MENTION_PREFIX}${ref}': ${errMsg(err)}\n`,
       );
     }
   }

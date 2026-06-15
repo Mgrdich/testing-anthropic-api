@@ -1,4 +1,5 @@
 import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
+import { MENTION_PREFIX, PROMPT_PREFIX } from "@/cli/mcp-turn.ts";
 
 export type Args = {
   model: string;
@@ -48,10 +49,11 @@ Options:
   --mcp               Spawn the bundled MCP server (stdio) and expose its
                       tools to the model. Combines with --tools; alone, it
                       enables the agentic loop with MCP tools only. In the
-                      REPL: /prompts lists MCP prompts, /<name> key=value
-                      invokes one, and @<resource> (a docs/ file, e.g.
-                      @northvale-tunnel-collapse.md or a docs:// URI)
-                      attaches it to the turn.
+                      REPL: ${PROMPT_PREFIX}prompts lists MCP prompts,
+                      ${PROMPT_PREFIX}<name> key=value invokes one, and
+                      ${MENTION_PREFIX}<resource> (a docs/ file, e.g.
+                      ${MENTION_PREFIX}northvale-tunnel-collapse.md or a
+                      docs:// URI) attaches it to the turn.
   -h, --help          Show this help
 
 Environment:

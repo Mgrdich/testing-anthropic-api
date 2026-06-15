@@ -28,7 +28,7 @@ Public API is re-exported from `src/mcp/index.ts`.
   `loadMcpTools()`: `listTools()` → `mcpRunnableTools()` → adapt each
   `BetaRunnableTool` to the local `Tool` shape from `core/tools`.
 - `prompts.ts` — `listMcpPrompts()` / `getPromptMessages()` (SDK
-  `mcpMessages()`), backing the REPL's `/` slash commands.
+  `mcpMessages()`), backing the REPL's `#` prompt commands.
 - `resources.ts` — `listMcpResources()` / `readResourceBlock()` (SDK
   `mcpResourceToContent()`) / `resourceBlockText()`, backing the REPL's
   `@` mentions.
@@ -82,11 +82,12 @@ implemented in `cli/repl.ts` on top of this module's exports:
   alone (`--mcp` = MCP tools only) or combined with `--tools`
   (duplicate names throw), under both `--runner local` and
   `--runner sdk`.
-- **`/` slash commands → prompts** — `/prompts` (or `/help`) lists the
-  server's prompts to stderr; `/<name> key=value key="multi word"`
+- **`#` prompt commands → prompts** — `#prompts` (or `#help`) lists the
+  server's prompts to stderr; `#<name> key=value key="multi word"`
   fetches the prompt via `getPromptMessages` and appends its messages
   to history before the normal send. Unknown prompt / dead server →
-  stderr error, no API call.
+  stderr error, no API call. (`/` is reserved for future REPL commands;
+  the sigil is the `PROMPT_PREFIX` constant in `cli/mcp-turn.ts`.)
 - **`@` mentions → resources** — `@<name>` (a docs-relative path,
   resolved against `listResources`, e.g.
   `@northvale-tunnel-collapse.md`) or `@<uri>` (e.g.
@@ -96,7 +97,7 @@ implemented in `cli/repl.ts` on top of this module's exports:
   text. Unresolvable mentions warn and stay literal.
 
 Piped stdin exercises the same paths single-shot
-(`echo '/prompts' | bun run dev --mcp`). With `--debug`, the module adds
+(`echo '#prompts' | bun run dev --mcp`). With `--debug`, the module adds
 `mcp connect` / `mcp server info` / `mcp tools` / `mcp prompt` /
 `mcp resource` frames to the existing agentic traces.
 
@@ -132,7 +133,7 @@ Piped stdin exercises the same paths single-shot
   400s otherwise). Pick distinct names when adding server tools.
 - **Failure surface**: startup problems throw `McpConnectError` (callers
   print + exit non-zero); mid-session server death flips
-  `McpConnection.alive` (checked by the REPL's slash/mention paths) and
+  `McpConnection.alive` (checked by the REPL's prompt/mention paths) and
   warns once on stderr. Tool calls against a dead server surface as
   normal tool errors through the agentic loop's parse → run → catch.
 

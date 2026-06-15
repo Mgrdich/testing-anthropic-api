@@ -17,15 +17,18 @@ stdin, drives readline, and prints.
   MCP connect (when `--mcp`) → initial turn → REPL or exit.
 - `repl.ts` — `sendTurn()` (one conversational turn end-to-end) and
   `runRepl()` (the readline `> ` loop). The agentic hook wiring and the
-  MCP slash-command/@-mention handling are extracted into `hooks.ts` and
+  MCP prompt/`@`-mention handling are extracted into `hooks.ts` and
   `mcp-turn.ts` (below); `sendTurn` imports from both.
 - `hooks.ts` — `buildAgenticHooks()`, the one `AgenticHooks` factory for
   both runners (stdout text deltas, stderr `[tool]` traces, `y/N`
   approval), plus the private `truncate`/`compactJson` formatters.
-- `mcp-turn.ts` — MCP turn construction: `handleMcpSlash()` (the `/`
-  slash-command → prompt path) and `buildMentionContent()` (the
+- `mcp-turn.ts` — MCP turn construction: `handleMcpPrompt()` (the
+  `#`-prefixed prompt path) and `buildMentionContent()` (the
   `@resource` → XML-tagged content path). Both are no-ops without
-  `--mcp`.
+  `--mcp`. The two sigils are exported constants `PROMPT_PREFIX` (`#`)
+  and `MENTION_PREFIX` (`@`) — the single source of truth for the
+  dispatch, the regex, every user-facing string, and the `--help`
+  text. `/` is intentionally left free for future REPL commands.
 - `stdin.ts` — `readStdin()`: `""` on a TTY; otherwise reads all of
   stdin and trims.
 
@@ -53,11 +56,12 @@ stdin, drives readline, and prints.
 
 Per turn, in order:
 
-1. **User-turn construction.** With `--mcp`: a leading `/` routes to
-   `handleMcpSlash` (`/prompts` lists to stderr and sends nothing;
-   `/<name> key=value key="multi word"` fetches the prompt via
-   `getPromptMessages` and appends its messages); otherwise
-   `buildMentionContent` resolves `@<name>`/`@<uri>` mentions via
+1. **User-turn construction.** With `--mcp`: a leading `#`
+   (`PROMPT_PREFIX`) routes to `handleMcpPrompt` (`#prompts` lists to
+   stderr and sends nothing; `#<name> key=value key="multi word"`
+   fetches the prompt via `getPromptMessages` and appends its
+   messages); otherwise `buildMentionContent` resolves `@<name>`/`@<uri>`
+   mentions (`MENTION_PREFIX`) via
    `readResourceBlock`, attaching each as an XML-tagged
    (`<resource uri="…">`) text block ahead of the user text
    (non-text resources pass through as blocks; failed lookups warn and
