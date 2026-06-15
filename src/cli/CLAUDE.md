@@ -16,8 +16,16 @@ stdin, drives readline, and prints.
 - `index.ts` — `runCli(argv)`: parse → `--help` → `--debug` enable →
   MCP connect (when `--mcp`) → initial turn → REPL or exit.
 - `repl.ts` — `sendTurn()` (one conversational turn end-to-end) and
-  `runRepl()` (the readline `> ` loop), plus the agentic hook wiring
-  and the MCP slash-command/@-mention handling.
+  `runRepl()` (the readline `> ` loop). The agentic hook wiring and the
+  MCP slash-command/@-mention handling are extracted into `hooks.ts` and
+  `mcp-turn.ts` (below); `sendTurn` imports from both.
+- `hooks.ts` — `buildAgenticHooks()`, the one `AgenticHooks` factory for
+  both runners (stdout text deltas, stderr `[tool]` traces, `y/N`
+  approval), plus the private `truncate`/`compactJson` formatters.
+- `mcp-turn.ts` — MCP turn construction: `handleMcpSlash()` (the `/`
+  slash-command → prompt path) and `buildMentionContent()` (the
+  `@resource` → XML-tagged content path). Both are no-ops without
+  `--mcp`.
 - `stdin.ts` — `readStdin()`: `""` on a TTY; otherwise reads all of
   stdin and trims.
 
