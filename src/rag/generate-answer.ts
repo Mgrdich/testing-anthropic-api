@@ -1,5 +1,9 @@
-import { addUserMessage, extractText, streamAssistantMessage } from "@/core/messages.ts";
 import type { MessageParam } from "@/core/messages.ts";
+import {
+  addUserMessage,
+  extractText,
+  streamAssistantMessage,
+} from "@/core/messages.ts";
 import type { Retrieved } from "@/rag/types.ts";
 
 const SYSTEM =

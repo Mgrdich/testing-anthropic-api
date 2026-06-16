@@ -46,7 +46,9 @@ export async function connectLocalMcp(): Promise<McpConnection> {
       new Promise<never>((_, reject) => {
         timer = setTimeout(
           () =>
-            reject(new Error(`handshake timed out after ${CONNECT_TIMEOUT_MS}ms`)),
+            reject(
+              new Error(`handshake timed out after ${CONNECT_TIMEOUT_MS}ms`),
+            ),
           CONNECT_TIMEOUT_MS,
         );
       }),

@@ -1,10 +1,9 @@
 import { Debug } from "@/core/index.ts";
+import { BM25Retriever, tokenize } from "@/rag/bm25.ts";
 import { chunk } from "@/rag/chunkers/index.ts";
 import { Embedder } from "@/rag/embedder.ts";
-import { BM25Retriever, tokenize } from "@/rag/bm25.ts";
-import { VectorRetriever } from "@/rag/vector-store.ts";
-import { retrieveHybrid } from "@/rag/hybrid.ts";
 import { answerWithClaude } from "@/rag/generate-answer.ts";
+import { retrieveHybrid } from "@/rag/hybrid.ts";
 import type {
   Chunk,
   ChunkerConfig,
@@ -13,6 +12,7 @@ import type {
   Retriever,
   ScoredId,
 } from "@/rag/types.ts";
+import { VectorRetriever } from "@/rag/vector-store.ts";
 
 const dbg = Debug.get();
 
@@ -108,7 +108,8 @@ export async function runRag(input: RunRagInput) {
   await Promise.all(retrievers.map((r) => r.addBatch(items)));
   const tIndex = performance.now() - tIndexStart;
   dbg.log(
-    () => `indexed: ${retrievers.map((r) => `${r.name}(${r.size})`).join(", ")}`,
+    () =>
+      `indexed: ${retrievers.map((r) => `${r.name}(${r.size})`).join(", ")}`,
   );
   dbg.log(() => `query: ${JSON.stringify(input.query)}`);
   if (mode !== "vector") {

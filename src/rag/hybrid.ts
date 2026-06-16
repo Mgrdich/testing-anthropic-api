@@ -40,7 +40,9 @@ export async function retrieveHybrid(
 ) {
   if (retrievers.length === 0) return [];
   const over = Math.max(k * 3, k);
-  const rankings = await Promise.all(retrievers.map((r) => r.search(query, over)));
+  const rankings = await Promise.all(
+    retrievers.map((r) => r.search(query, over)),
+  );
   if (opts?.onRankings) {
     opts.onRankings(
       retrievers.map((r, i) => ({ name: r.name, ranking: rankings[i] ?? [] })),

@@ -2,11 +2,11 @@ import { semanticChunker } from "@/rag/chunkers/semantic.ts";
 import { sizeChunker } from "@/rag/chunkers/size.ts";
 import { structureChunker } from "@/rag/chunkers/structure.ts";
 import type { Embedder } from "@/rag/embedder.ts";
-import type { Chunk, ChunkerConfig } from "@/rag/types.ts";
+import type { ChunkerConfig } from "@/rag/types.ts";
 
+export { semanticChunker } from "@/rag/chunkers/semantic.ts";
 export { sizeChunker } from "@/rag/chunkers/size.ts";
 export { structureChunker } from "@/rag/chunkers/structure.ts";
-export { semanticChunker } from "@/rag/chunkers/semantic.ts";
 
 export async function chunk(
   text: string,

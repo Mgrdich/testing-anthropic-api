@@ -1,4 +1,7 @@
 import * as fs from "node:fs";
+import { gradeWithCode } from "@/eval/codeGrader.ts";
+import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
+import { gradeWithModel } from "@/eval/modelGrader.ts";
 import {
   auxPromptFile,
   codeEvalFile,
@@ -8,23 +11,20 @@ import {
   gradedPath,
   runsPath,
 } from "@/eval/paths.ts";
-import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
+import { runPromptOnDataset } from "@/eval/runner.ts";
 import {
-  CodeRowSchema,
-  CombinedRowSchema,
-  GradedRowSchema,
-  RunRowSchema,
   type CheckResult,
   type CodeRow,
+  CodeRowSchema,
   type CombinedRow,
+  CombinedRowSchema,
   type CombinedScore,
   type GradedRow,
+  GradedRowSchema,
   type ModelGradeOrError,
   type RunRow,
+  RunRowSchema,
 } from "@/eval/types.ts";
-import { runPromptOnDataset } from "@/eval/runner.ts";
-import { gradeWithCode } from "@/eval/codeGrader.ts";
-import { gradeWithModel } from "@/eval/modelGrader.ts";
 
 export type CombineWeights = { code: number; model: number };
 
@@ -44,7 +44,9 @@ function bucket(score: number) {
   return Math.floor(score);
 }
 
-function isCodeOk(code: (CheckResult & { error?: boolean }) | undefined): code is CheckResult & { error?: false } {
+function isCodeOk(
+  code: (CheckResult & { error?: boolean }) | undefined,
+): code is CheckResult & { error?: false } {
   return code !== undefined && code.error !== true;
 }
 
@@ -136,15 +138,13 @@ function fullCell(s: string) {
   return s.replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
 }
 
-function truncateCell(s: string, max = 80) {
+function _truncateCell(s: string, max = 80) {
   const flat = escapeCell(s);
   if (flat.length <= max) return flat;
   return `${flat.slice(0, max - 1)}…`;
 }
 
-function formatCodeCell(
-  code: (CheckResult & { error?: boolean }) | undefined,
-) {
+function formatCodeCell(code: (CheckResult & { error?: boolean }) | undefined) {
   if (code === undefined) return "—";
   if (code.error === true) return "err";
   return code.score.toFixed(2);
@@ -234,10 +234,7 @@ function mtimeMs(p: string) {
 // Mtime-based (not existence-based) because combined's inputs are
 // themselves cached tool outputs - an upstream `--force` rewrites them
 // and a plain existence check would silently serve a stale join.
-function isCombinedFresh(
-  outPath: string,
-  inputPaths: readonly string[],
-) {
+function isCombinedFresh(outPath: string, inputPaths: readonly string[]) {
   const outMtime = mtimeMs(outPath);
   if (outMtime === null) return false;
   for (const p of inputPaths) {
@@ -263,15 +260,24 @@ export async function combineGrader(opts: {
 
   if (opts.auto) {
     if (!fs.existsSync(rPath)) {
-      process.stderr.write(`[combined] auto: running prompt (runs.jsonl missing)\n`);
+      process.stderr.write(
+        `[combined] auto: running prompt (runs.jsonl missing)\n`,
+      );
       await runPromptOnDataset({ name: opts.name, version: opts.version });
     }
     if (fs.existsSync(codeEvalFile(opts.name)) && !fs.existsSync(cPath)) {
-      process.stderr.write(`[combined] auto: running code grader (code.jsonl missing)\n`);
+      process.stderr.write(
+        `[combined] auto: running code grader (code.jsonl missing)\n`,
+      );
       await gradeWithCode({ name: opts.name, version: opts.version });
     }
-    if (fs.existsSync(auxPromptFile(opts.name, "judge")) && !fs.existsSync(gPath)) {
-      process.stderr.write(`[combined] auto: running model grader (graded.jsonl missing)\n`);
+    if (
+      fs.existsSync(auxPromptFile(opts.name, "judge")) &&
+      !fs.existsSync(gPath)
+    ) {
+      process.stderr.write(
+        `[combined] auto: running model grader (graded.jsonl missing)\n`,
+      );
       await gradeWithModel({ name: opts.name, version: opts.version });
     }
   }
@@ -321,7 +327,8 @@ export async function combineGrader(opts: {
     runsPath(opts.name, opts.version),
     (row, i) => {
       const r = RunRowSchema.safeParse(row);
-      if (!r.success) throw new Error(`runs row ${i} invalid: ${r.error.message}`);
+      if (!r.success)
+        throw new Error(`runs row ${i} invalid: ${r.error.message}`);
       return r.data;
     },
   );
@@ -330,7 +337,8 @@ export async function combineGrader(opts: {
   if (haveGraded) {
     graded = parseRowsFromFile(gPath, (row, i) => {
       const r = GradedRowSchema.safeParse(row);
-      if (!r.success) throw new Error(`graded row ${i} invalid: ${r.error.message}`);
+      if (!r.success)
+        throw new Error(`graded row ${i} invalid: ${r.error.message}`);
       return r.data;
     });
     if (graded.length !== runs.length) {
@@ -344,7 +352,8 @@ export async function combineGrader(opts: {
   if (haveCode) {
     code = parseRowsFromFile(cPath, (row, i) => {
       const r = CodeRowSchema.safeParse(row);
-      if (!r.success) throw new Error(`code row ${i} invalid: ${r.error.message}`);
+      if (!r.success)
+        throw new Error(`code row ${i} invalid: ${r.error.message}`);
       return r.data;
     });
     if (code.length !== runs.length) {

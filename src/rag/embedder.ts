@@ -37,7 +37,10 @@ export class Embedder {
     if (texts.length === 0) return [];
     await this.ensureReady();
     if (!this.pipeline) throw new Error("embedder pipeline not initialized");
-    const out = await this.pipeline(texts, { pooling: "mean", normalize: true });
+    const out = await this.pipeline(texts, {
+      pooling: "mean",
+      normalize: true,
+    });
     const flat = out.data as Float32Array;
     const n = texts.length;
     const dim = flat.length / n;

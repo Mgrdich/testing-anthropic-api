@@ -2,9 +2,9 @@ import { errMsg, type MessageParam } from "@/core/index.ts";
 import {
   getPromptMessages,
   listMcpPrompts,
+  type McpConnection,
   readResourceBlock,
   resourceBlockText,
-  type McpConnection,
 } from "@/mcp/index.ts";
 
 /**
@@ -104,10 +104,7 @@ const MENTION_RE = new RegExp(
  * style); the user's text follows as the final block. Unresolvable mentions
  * warn and stay literal. Lines without mentions pass through as plain text.
  */
-export async function buildMentionContent(
-  mcp: McpConnection,
-  text: string,
-) {
+export async function buildMentionContent(mcp: McpConnection, text: string) {
   const refs = [
     ...new Set(
       [...text.matchAll(MENTION_RE)]

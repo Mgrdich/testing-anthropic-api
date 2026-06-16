@@ -1,9 +1,5 @@
 import type * as readline from "node:readline/promises";
-import {
-  Debug,
-  MUTATING_TOOLS,
-  type AgenticHooks,
-} from "@/core/index.ts";
+import { type AgenticHooks, Debug, MUTATING_TOOLS } from "@/core/index.ts";
 
 const dbg = Debug.get();
 
@@ -46,7 +42,9 @@ export function buildAgenticHooks(
     },
     onToolResult: (name, result, isError) => {
       const sigil = isError ? "✗" : "→";
-      const shown = dbg.enabled ? result : truncate(result, TOOL_RESULT_PREVIEW_MAX);
+      const shown = dbg.enabled
+        ? result
+        : truncate(result, TOOL_RESULT_PREVIEW_MAX);
       // Prefix with the tool name so concurrent results stay readable
       // when multiple tools fire in one round.
       process.stderr.write(`  ${sigil} ${name}: ${shown}\n`);

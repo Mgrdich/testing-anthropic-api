@@ -15,10 +15,10 @@ export function readJsonl(filePath: string) {
 export function writeJsonl<T>(filePath: string, rows: readonly T[]) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const body = rows.map((r) => JSON.stringify(r)).join("\n");
-  fs.writeFileSync(filePath, rows.length > 0 ? body + "\n" : "");
+  fs.writeFileSync(filePath, rows.length > 0 ? `${body}\n` : "");
 }
 
 export function appendJsonl<T>(filePath: string, row: T) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.appendFileSync(filePath, JSON.stringify(row) + "\n");
+  fs.appendFileSync(filePath, `${JSON.stringify(row)}\n`);
 }

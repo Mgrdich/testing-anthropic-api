@@ -41,7 +41,7 @@ function parseSections(text: string, maxLevel: number) {
     }
     if (!inFence) {
       const h = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-      if (h && h[1] && h[2]) {
+      if (h?.[1] && h[2]) {
         const level = h[1].length;
         const title = h[2];
         if (level <= maxLevel) {
@@ -117,7 +117,8 @@ export function structureChunker(text: string, opts: StructureConfig) {
   }
 
   let split: Section[] = [];
-  for (const sec of sections) split.push(...splitLargeSection(sec, opts.maxChars));
+  for (const sec of sections)
+    split.push(...splitLargeSection(sec, opts.maxChars));
 
   if (opts.joinShortSiblings) {
     const merged: Section[] = [];
@@ -147,9 +148,15 @@ export function structureChunker(text: string, opts: StructureConfig) {
   for (let i = 0; i < split.length; i++) {
     const s = split[i];
     if (!s) continue;
-    const pathSlug = s.headingPath
-      .map((h) => h.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20))
-      .join(".") || "root";
+    const pathSlug =
+      s.headingPath
+        .map((h) =>
+          h
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .slice(0, 20),
+        )
+        .join(".") || "root";
     chunks.push({
       id: `struct-${pathSlug}-${i}`,
       text: s.text,

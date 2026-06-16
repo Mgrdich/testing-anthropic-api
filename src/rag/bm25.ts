@@ -1,11 +1,55 @@
 import type { Retriever, ScoredId } from "@/rag/types.ts";
 
 const STOPWORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "have",
-  "he", "in", "is", "it", "its", "of", "on", "that", "the", "to", "was", "were",
-  "will", "with", "i", "you", "we", "this", "but", "or", "not", "they", "their",
-  "there", "which", "what", "when", "how", "do", "does", "did", "if", "so",
-  "than", "then", "these", "those",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "has",
+  "have",
+  "he",
+  "in",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "that",
+  "the",
+  "to",
+  "was",
+  "were",
+  "will",
+  "with",
+  "i",
+  "you",
+  "we",
+  "this",
+  "but",
+  "or",
+  "not",
+  "they",
+  "their",
+  "there",
+  "which",
+  "what",
+  "when",
+  "how",
+  "do",
+  "does",
+  "did",
+  "if",
+  "so",
+  "than",
+  "then",
+  "these",
+  "those",
 ]);
 
 export function tokenize(s: string) {
@@ -80,8 +124,9 @@ export class BM25Index {
         if (tf === 0) continue;
         const df = this.df.get(term) ?? 0;
         const idf = Math.log((N - df + 0.5) / (df + 0.5) + 1);
-        const denom = tf + this.k1 * (1 - this.b + (this.b * doc.len) / this.avgDocLen);
-        s += idf * (tf * (this.k1 + 1)) / denom;
+        const denom =
+          tf + this.k1 * (1 - this.b + (this.b * doc.len) / this.avgDocLen);
+        s += (idf * (tf * (this.k1 + 1))) / denom;
       }
       if (s > 0) scores.push({ id: doc.id, score: s });
     }

@@ -15,7 +15,12 @@
     "mcp:server": "bun run src/mcp/server.ts",
     "build": "bun build src/index.ts --outdir dist --target bun --minify",
     "start": "bun run dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "biome format --write",
+    "format:check": "biome format",
+    "lint": "biome lint",
+    "check": "biome check",
+    "check:write": "biome check --write"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
@@ -24,6 +29,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
     "@types/bun": "latest",
     "typescript": "^6"
   },

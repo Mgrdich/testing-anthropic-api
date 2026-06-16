@@ -13,7 +13,9 @@ export function extractJsonSpan(
   const start = text.indexOf(open);
   const end = text.lastIndexOf(close);
   if (start === -1 || end === -1 || end < start) {
-    throw new Error(`${errorLabel} (no '${open}' or '${close}' found):\n${text}`);
+    throw new Error(
+      `${errorLabel} (no '${open}' or '${close}' found):\n${text}`,
+    );
   }
   return JSON.parse(text.slice(start, end + 1));
 }

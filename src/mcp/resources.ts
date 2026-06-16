@@ -47,10 +47,7 @@ export async function listMcpResources(client: Client) {
  * content block via the SDK's `mcpResourceToContent()` helper. Throws on
  * unknown names so callers can warn and keep the mention as literal text.
  */
-export async function readResourceBlock(
-  client: Client,
-  ref: string,
-) {
+export async function readResourceBlock(client: Client, ref: string) {
   let uri = ref;
   if (!ref.includes("://")) {
     const resources = await listMcpResources(client);

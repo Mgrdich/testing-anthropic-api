@@ -21,9 +21,7 @@ import { errMsg } from "@/core/util.ts";
  * process.argv (slicing the `bun run …` prefix), runs `main`, and exits
  * 1 with `error: <msg>` on any thrown error.
  */
-export function runMain(
-  main: (argv: readonly string[]) => Promise<void>,
-) {
+export function runMain(main: (argv: readonly string[]) => Promise<void>) {
   main(process.argv.slice(2)).catch((err) => {
     process.stderr.write(`error: ${errMsg(err)}\n`);
     process.exit(1);
@@ -35,11 +33,7 @@ export function runMain(
  * stays local (TS narrowing on `never` arrow functions doesn't propagate
  * through destructuring) but its body is this single call.
  */
-export function writeUsageError(
-  usage: string,
-  msg: string,
-  code = 2,
-): never {
+export function writeUsageError(usage: string, msg: string, code = 2): never {
   process.stderr.write(`error: ${msg}\n\n${usage}`);
   process.exit(code);
 }
@@ -70,10 +64,7 @@ export function parseArgs(argv: readonly string[]) {
   return out;
 }
 
-export function getString(
-  flags: Flags["flags"],
-  key: string,
-) {
+export function getString(flags: Flags["flags"], key: string) {
   const v = flags[key];
   return typeof v === "string" ? v : undefined;
 }
@@ -163,11 +154,7 @@ export function makeCli(usage: string): Cli {
     return n;
   };
 
-  const getBool = (
-    flags: Flags["flags"],
-    key: string,
-    fallback: boolean,
-  ) => {
+  const getBool = (flags: Flags["flags"], key: string, fallback: boolean) => {
     const raw = flags[key];
     if (raw === undefined) return fallback;
     if (raw === true) return true;

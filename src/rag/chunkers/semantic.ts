@@ -27,10 +27,7 @@ function percentile(values: number[], p: number) {
   return loVal + (hiVal - loVal) * (idx - lo);
 }
 
-function buildSegments(
-  sentences: Sentence[],
-  breakAfter: Set<number>,
-) {
+function buildSegments(sentences: Sentence[], breakAfter: Set<number>) {
   const segments: Sentence[][] = [];
   let cur: Sentence[] = [];
   for (let i = 0; i < sentences.length; i++) {
@@ -158,7 +155,11 @@ export async function semanticChunker(
   }
 
   const segments = buildSegments(sentences, breakAfter);
-  const merged = mergeAndSplit(segments, opts.minChunkChars, opts.maxChunkChars);
+  const merged = mergeAndSplit(
+    segments,
+    opts.minChunkChars,
+    opts.maxChunkChars,
+  );
 
   const chunks: Chunk[] = [];
   for (let i = 0; i < merged.length; i++) {

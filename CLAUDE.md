@@ -13,10 +13,19 @@ bun run start [prompt] # run the bundled output
 bun run mcp --debug    # MCP demo: spawns the stdio server, exercises tools/prompts/resources
                        # (--debug recommended: section headers are Debug traces on stderr)
 bun run mcp:server     # run the MCP server standalone (for inspector tooling)
+bun run check          # Biome: format-verify + lint + import-sort (no writes)
+bun run check:write    # Biome: apply formatting, safe lint fixes, import-sort
+bun run format         # Biome: format src/**/*.ts in place
+bun run lint           # Biome: lint only
 ```
 
-There is no test suite. `bun run typecheck` is the only correctness gate — run it
-after any edit.
+There is no test suite. `bun run check` (Biome) and `bun run typecheck` are the
+two correctness gates — run both after any edit; CI runs them on push/PR. A
+`PostToolUse` hook (`.claude/settings.json` → `.claude/hooks/biome-format.sh`)
+also auto-formats each file Claude writes or edits. Formatting/linting is
+configured in `biome.json` (2-space, double-quote, 80-col — Prettier-matched;
+scoped to `src/**/*.ts`; `noAssignInExpressions` disabled for the idiomatic
+`while ((m = re.exec(…)))` pattern).
 
 `ANTHROPIC_API_KEY` must be set; Bun auto-loads `.env` so a local `.env` works.
 

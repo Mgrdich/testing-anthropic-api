@@ -94,9 +94,7 @@ server.registerTool(
     inputSchema: {
       path: z
         .string()
-        .describe(
-          "Docs-relative path, e.g. northvale-tunnel-collapse.md",
-        ),
+        .describe("Docs-relative path, e.g. northvale-tunnel-collapse.md"),
     },
   },
   async ({ path }) => {
@@ -129,7 +127,9 @@ server.registerPrompt(
       audience: z
         .string()
         .optional()
-        .describe("Who the explanation is for (default: a general technical reader)"),
+        .describe(
+          "Who the explanation is for (default: a general technical reader)",
+        ),
     },
   },
   ({ topic, audience }) => ({
@@ -166,7 +166,7 @@ server.registerResource(
       "Documents from the project docs/ folder; one resource per file.",
   },
   async (uri, variables) => {
-    const raw = variables["path"];
+    const raw = variables.path;
     const path = Array.isArray(raw) ? raw.join("/") : (raw ?? "");
     const decoded = decodeURIComponent(path);
     return {

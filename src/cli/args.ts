@@ -1,5 +1,5 @@
-import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 import { MENTION_PREFIX, PROMPT_PREFIX } from "@/cli/mcp-turn.ts";
+import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 
 export type Args = {
   model: string;
@@ -144,7 +144,9 @@ export function parseArgs(argv: readonly string[]) {
         if (!v) throw new Error("--max-iterations requires a value");
         const n = Number.parseInt(v, 10);
         if (!Number.isFinite(n) || n <= 0) {
-          throw new Error(`--max-iterations must be a positive integer (got ${v})`);
+          throw new Error(
+            `--max-iterations must be a positive integer (got ${v})`,
+          );
         }
         out.maxIterations = n;
         break;
@@ -152,7 +154,9 @@ export function parseArgs(argv: readonly string[]) {
       case "--runner": {
         const v = argv[++i];
         if (v !== "local" && v !== "sdk") {
-          throw new Error(`--runner must be 'local' or 'sdk' (got ${v ?? "<missing>"})`);
+          throw new Error(
+            `--runner must be 'local' or 'sdk' (got ${v ?? "<missing>"})`,
+          );
         }
         out.runner = v;
         break;
@@ -180,7 +184,7 @@ export function parseArgs(argv: readonly string[]) {
         break;
       }
       default:
-        if (a !== undefined && a.startsWith("--")) {
+        if (a?.startsWith("--")) {
           throw new Error(`Unknown option: ${a}`);
         }
         if (a !== undefined) positional.push(a);

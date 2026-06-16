@@ -1,16 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
-import { codeEvalFile, codePath, runsPath } from "@/eval/paths.ts";
+import { errMsg } from "@/core/index.ts";
 import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
+import { codeEvalFile, codePath, runsPath } from "@/eval/paths.ts";
 import {
+  type CheckFn,
   CheckResultSchema,
+  type CodeRow,
   CodeRowSchema,
   RunRowSchema,
-  type CheckFn,
-  type CodeRow,
 } from "@/eval/types.ts";
-import { errMsg } from "@/core/index.ts";
 
 const CodeEvalModuleSchema = z.object({
   check: z.custom<CheckFn>((val) => typeof val === "function", {
@@ -18,7 +18,9 @@ const CodeEvalModuleSchema = z.object({
   }),
 });
 
-function summarizeZodIssues(issues: { path: PropertyKey[]; message: string }[]) {
+function summarizeZodIssues(
+  issues: { path: PropertyKey[]; message: string }[],
+) {
   return issues
     .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
     .join("; ");
@@ -52,7 +54,9 @@ export async function gradeWithCode(opts: {
     const cached = readJsonl(outPath).map((row, i) => {
       const result = CodeRowSchema.safeParse(row);
       if (!result.success) {
-        throw new Error(`cached code row ${i} invalid: ${result.error.message}`);
+        throw new Error(
+          `cached code row ${i} invalid: ${result.error.message}`,
+        );
       }
       return result.data;
     });

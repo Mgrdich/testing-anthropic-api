@@ -1,12 +1,12 @@
+import { type Args, parseArgs, printHelp } from "@/cli/args.ts";
+import { runRepl, sendTurn } from "@/cli/repl.ts";
+import { readStdin } from "@/cli/stdin.ts";
 import { Debug, errMsg, type MessageParam, type Tool } from "@/core/index.ts";
 import {
   connectLocalMcp,
   loadMcpTools,
   type McpConnection,
 } from "@/mcp/index.ts";
-import { type Args, parseArgs, printHelp } from "@/cli/args.ts";
-import { runRepl, sendTurn } from "@/cli/repl.ts";
-import { readStdin } from "@/cli/stdin.ts";
 
 export async function runCli(argv: readonly string[]) {
   let args: Args;
@@ -35,7 +35,9 @@ export async function runCli(argv: readonly string[]) {
       mcpTools = await loadMcpTools(mcp.client);
     } catch (err) {
       await mcp?.close().catch(() => {});
-      process.stderr.write(`error: failed to start MCP server: ${errMsg(err)}\n`);
+      process.stderr.write(
+        `error: failed to start MCP server: ${errMsg(err)}\n`,
+      );
       process.exit(1);
     }
   }

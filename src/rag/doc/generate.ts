@@ -1,7 +1,7 @@
-import { addAssistantMessage, extractText } from "@/core/messages.ts";
 import type { MessageParam } from "@/core/messages.ts";
-import { TOPICS } from "@/rag/doc/template.ts";
+import { addAssistantMessage, extractText } from "@/core/messages.ts";
 import type { HandbookTopic } from "@/rag/doc/template.ts";
+import { TOPICS } from "@/rag/doc/template.ts";
 
 const DEFAULT_DOC_MODEL = "claude-haiku-4-5-20251001";
 
@@ -42,9 +42,7 @@ export type GenerateDocResult = {
   totalChars: number;
 };
 
-export async function generateSyntheticDoc(
-  input: GenerateDocInput,
-) {
+export async function generateSyntheticDoc(input: GenerateDocInput) {
   const model = input.model ?? DEFAULT_DOC_MODEL;
   const wanted = input.sections ?? TOPICS.length;
   const topics = TOPICS.slice(0, Math.min(wanted, TOPICS.length));
@@ -53,7 +51,9 @@ export async function generateSyntheticDoc(
   for (let i = 0; i < topics.length; i++) {
     const topic = topics[i];
     if (!topic) continue;
-    const messages: MessageParam[] = [{ role: "user", content: buildPrompt(topic) }];
+    const messages: MessageParam[] = [
+      { role: "user", content: buildPrompt(topic) },
+    ];
     const response = await addAssistantMessage(messages, {
       model,
       system: SYSTEM,

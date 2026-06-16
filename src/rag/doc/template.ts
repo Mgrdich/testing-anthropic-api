@@ -68,12 +68,7 @@ export const TOPICS: ReadonlyArray<HandbookTopic> = [
   },
   {
     title: "Secret Management",
-    h2Outline: [
-      "Storage Backends",
-      "Rotation",
-      "Access Control",
-      "Auditing",
-    ],
+    h2Outline: ["Storage Backends", "Rotation", "Access Control", "Auditing"],
   },
   {
     title: "Performance Engineering",

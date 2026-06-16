@@ -1,12 +1,12 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
 import {
-  streamAssistantMessage,
   type MessageParam,
   type StreamAssistantOptions,
+  streamAssistantMessage,
 } from "@/core/messages.ts";
-import { errMsg } from "@/core/util.ts";
 import type { Tool } from "@/core/tools/types.ts";
+import { errMsg } from "@/core/util.ts";
 
 export type AgenticHooks = {
   onStream?: (stream: MessageStream) => void;

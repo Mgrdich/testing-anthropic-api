@@ -44,7 +44,7 @@ function mergePrefillIntoContent(
   content: Anthropic.Message["content"],
 ) {
   const first = content[0];
-  if (!first || first.type !== "text") return content;
+  if (first?.type !== "text") return content;
   return [{ ...first, text: prefill + first.text }, ...content.slice(1)];
 }
 

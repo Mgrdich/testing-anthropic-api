@@ -21,12 +21,7 @@ import {
 } from "@anthropic-ai/sdk/helpers/beta/mcp";
 import type { BetaToolRunContext } from "@anthropic-ai/sdk/lib/tools/BetaRunnableTool";
 import type { BetaMessage } from "@anthropic-ai/sdk/resources/beta";
-import {
-  AnthropicClient,
-  Debug,
-  DEFAULT_MODEL,
-  errMsg,
-} from "@/core/index.ts";
+import { AnthropicClient, DEFAULT_MODEL, Debug, errMsg } from "@/core/index.ts";
 import {
   connectLocalMcp,
   mcpRunnableTools,
@@ -157,23 +152,21 @@ try {
     "model",
     `tool schemas sent to Claude: ${toolList.tools.map((t) => t.name).join(", ")}`,
   );
-  const runnable = mcpRunnableTools(toolList.tools, client).map(
-    (t) => ({
-      ...t,
-      run: async (args: Record<string, unknown>, ctx?: BetaToolRunContext) => {
-        // Both halves are model-facing: the input is what Claude emitted in
-        // its tool_use block, and the result is fed back into its context.
-        process.stderr.write(
-          `\n\n[model-facing] [tool] ${t.name}(${JSON.stringify(ctx?.toolUse.input ?? args)})\n`,
-        );
-        const out = await t.run(args, ctx);
-        process.stderr.write(
-          `  → ${typeof out === "string" ? out : JSON.stringify(out)}\n`,
-        );
-        return out;
-      },
-    }),
-  );
+  const runnable = mcpRunnableTools(toolList.tools, client).map((t) => ({
+    ...t,
+    run: async (args: Record<string, unknown>, ctx?: BetaToolRunContext) => {
+      // Both halves are model-facing: the input is what Claude emitted in
+      // its tool_use block, and the result is fed back into its context.
+      process.stderr.write(
+        `\n\n[model-facing] [tool] ${t.name}(${JSON.stringify(ctx?.toolUse.input ?? args)})\n`,
+      );
+      const out = await t.run(args, ctx);
+      process.stderr.write(
+        `  → ${typeof out === "string" ? out : JSON.stringify(out)}\n`,
+      );
+      return out;
+    },
+  }));
   const runner = anthropic.beta.messages.toolRunner({
     model: DEFAULT_MODEL,
     max_tokens: 1024,

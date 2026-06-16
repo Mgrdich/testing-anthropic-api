@@ -15,9 +15,7 @@ export async function listMcpPrompts(client: Client) {
   return prompts.map((p) => ({
     name: p.name,
     ...(p.description !== undefined ? { description: p.description } : {}),
-    args: (p.arguments ?? []).map(
-      (a) => (a.required ? a.name : `${a.name}?`),
-    ),
+    args: (p.arguments ?? []).map((a) => (a.required ? a.name : `${a.name}?`)),
   }));
 }
 

@@ -10,10 +10,7 @@ export function promptVersionFile(name: string, version: string) {
   return path.join(promptDir(name), `${version}.txt`);
 }
 
-export function auxPromptFile(
-  name: string,
-  kind: "generate" | "judge",
-) {
+export function auxPromptFile(name: string, kind: "generate" | "judge") {
   return path.join(promptDir(name), `${kind}.txt`);
 }
 

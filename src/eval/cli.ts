@@ -1,5 +1,5 @@
-import { makeCli, parseArgs, runMain } from "@/core/index.ts";
 import type { DieFn } from "@/core/index.ts";
+import { makeCli, parseArgs, runMain } from "@/core/index.ts";
 import {
   CheckTemplateSchema,
   combineGrader,
@@ -82,7 +82,7 @@ async function main(argv: readonly string[]) {
       const name = positional[0];
       if (!name) die("gen requires <name>");
       const count = getInt(flags, "count", 10, { min: 1 });
-      const force = flags["force"] === true;
+      const force = flags.force === true;
       const result = await generateDataset({ name, count, force });
       process.stdout.write(`wrote ${result.path} (${result.count} items)\n`);
       return;
@@ -92,7 +92,7 @@ async function main(argv: readonly string[]) {
       const version = positional[1];
       if (!name || !version) die("run requires <name> <version>");
       const model = getString(flags, "model");
-      const force = flags["force"] === true;
+      const force = flags.force === true;
       const result = await runPromptOnDataset({ name, version, model, force });
       const verb = result.cached ? "cached" : "wrote";
       process.stdout.write(`${verb} ${result.path} (${result.count} rows)\n`);
@@ -102,7 +102,7 @@ async function main(argv: readonly string[]) {
       const name = positional[0];
       const version = positional[1];
       if (!name || !version) die("code requires <name> <version>");
-      const force = flags["force"] === true;
+      const force = flags.force === true;
       const result = await gradeWithCode({ name, version, force });
       if (result === null) return;
       const verb = result.cached ? "cached" : "wrote";
@@ -116,7 +116,7 @@ async function main(argv: readonly string[]) {
       const version = positional[1];
       if (!name || !version) die("grade requires <name> <version>");
       const model = getString(flags, "model");
-      const force = flags["force"] === true;
+      const force = flags.force === true;
       const result = await gradeWithModel({ name, version, model, force });
       const verb = result.cached ? "cached" : "wrote";
       process.stdout.write(
@@ -143,17 +143,26 @@ async function main(argv: readonly string[]) {
           !Number.isFinite(c) ||
           !Number.isFinite(m)
         ) {
-          die(`--weights must be two comma-separated numbers (got ${weightsRaw})`);
+          die(
+            `--weights must be two comma-separated numbers (got ${weightsRaw})`,
+          );
         }
         if (Math.abs(c + m - 1) > 1e-9) {
           die(`--weights must sum to 1 (got ${c} + ${m} = ${c + m})`);
         }
         weights = { code: c, model: m };
       }
-      const markdown = flags["markdown"] === true;
-      const auto = flags["auto"] === true;
-      const force = flags["force"] === true;
-      const result = await combineGrader({ name, version, weights, markdown, auto, force });
+      const markdown = flags.markdown === true;
+      const auto = flags.auto === true;
+      const force = flags.force === true;
+      const result = await combineGrader({
+        name,
+        version,
+        weights,
+        markdown,
+        auto,
+        force,
+      });
       const verb = result.cached ? "cached" : "wrote";
       process.stdout.write(
         `${verb} ${result.path} (${result.count} rows)\n${result.summary}\n`,

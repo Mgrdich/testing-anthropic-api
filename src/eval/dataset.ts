@@ -4,11 +4,11 @@ import {
   addUserMessage,
   type MessageParam,
 } from "@/core/index.ts";
-import { loadAuxPrompt } from "@/eval/prompts.ts";
 import { extractJsonSpan } from "@/eval/json.ts";
-import { datasetPath } from "@/eval/paths.ts";
 import { writeJsonl } from "@/eval/jsonl.ts";
-import { DatasetItemSchema, type DatasetItem } from "@/eval/types.ts";
+import { datasetPath } from "@/eval/paths.ts";
+import { loadAuxPrompt } from "@/eval/prompts.ts";
+import { type DatasetItem, DatasetItemSchema } from "@/eval/types.ts";
 
 const GEN_MODEL = "claude-haiku-4-5-20251001";
 const GEN_MAX_TOKENS = 4096;
@@ -34,9 +34,7 @@ export async function generateDataset(opts: {
 }) {
   const outPath = datasetPath(opts.name);
   if (fs.existsSync(outPath) && !opts.force) {
-    throw new Error(
-      `${outPath} already exists. Pass --force to overwrite.`,
-    );
+    throw new Error(`${outPath} already exists. Pass --force to overwrite.`);
   }
 
   const system = loadAuxPrompt(opts.name, "generate").replaceAll(
@@ -62,7 +60,7 @@ export async function generateDataset(opts: {
   );
 
   const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
+  if (textBlock?.type !== "text") {
     throw new Error("model response had no text block");
   }
 

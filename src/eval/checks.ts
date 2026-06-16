@@ -1,6 +1,6 @@
-import { z } from "zod";
-import type { CheckFn, CheckResult, DatasetItem } from "@/eval/types.ts";
+import type { z } from "zod";
 import { errMsg } from "@/core/index.ts";
+import type { CheckFn, CheckResult, DatasetItem } from "@/eval/types.ts";
 
 export function stripCodeFence(s: string) {
   const trimmed = s.trim();

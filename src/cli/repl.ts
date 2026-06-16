@@ -1,17 +1,5 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import * as readline from "node:readline/promises";
-import {
-  addAssistantMessage,
-  addUserMessage,
-  Debug,
-  runAgenticTurn,
-  runAgenticTurnSdk,
-  selectTools,
-  streamAssistantMessage,
-  type MessageParam,
-  type Tool,
-} from "@/core/index.ts";
-import type { McpConnection } from "@/mcp/index.ts";
+import type Anthropic from "@anthropic-ai/sdk";
 import type { Args } from "@/cli/args.ts";
 import { buildAgenticHooks } from "@/cli/hooks.ts";
 import {
@@ -20,6 +8,18 @@ import {
   MENTION_PREFIX,
   PROMPT_PREFIX,
 } from "@/cli/mcp-turn.ts";
+import {
+  addAssistantMessage,
+  addUserMessage,
+  Debug,
+  type MessageParam,
+  runAgenticTurn,
+  runAgenticTurnSdk,
+  selectTools,
+  streamAssistantMessage,
+  type Tool,
+} from "@/core/index.ts";
+import type { McpConnection } from "@/mcp/index.ts";
 
 const dbg = Debug.get();
 
@@ -74,7 +74,8 @@ export async function sendTurn(opts: TurnOpts) {
       seen.add(t.name);
     }
     const hooks = buildAgenticHooks(opts.rl);
-    const runner = opts.args.runner === "sdk" ? runAgenticTurnSdk : runAgenticTurn;
+    const runner =
+      opts.args.runner === "sdk" ? runAgenticTurnSdk : runAgenticTurn;
     const finalResponse = await runner(
       opts.messages,
       { ...requestOpts, max_iterations: opts.args.maxIterations },

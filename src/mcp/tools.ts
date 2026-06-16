@@ -1,7 +1,7 @@
 import {
-  mcpTools,
   type MCPClientLike,
   type MCPToolLike,
+  mcpTools,
 } from "@anthropic-ai/sdk/helpers/beta/mcp";
 import type { BetaRunnableTool } from "@anthropic-ai/sdk/lib/tools/BetaRunnableTool";
 import type {
@@ -69,9 +69,7 @@ function isCustomRunnableTool(
  * degrades to a `[type]` placeholder — fine for the bundled text-only tools,
  * documented in src/mcp/CLAUDE.md for future non-text tools.
  */
-function flattenResult(
-  out: string | BetaToolResultContentBlockParam[],
-) {
+function flattenResult(out: string | BetaToolResultContentBlockParam[]) {
   if (typeof out === "string") return out;
   return out
     .map((block) => (block.type === "text" ? block.text : `[${block.type}]`))

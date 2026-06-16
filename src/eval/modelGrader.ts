@@ -1,22 +1,22 @@
 import * as fs from "node:fs";
+import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 import {
   addAssistantMessage,
   addUserMessage,
+  errMsg,
   type MessageParam,
 } from "@/core/index.ts";
-import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 import { extractJsonSpan } from "@/eval/json.ts";
-import { loadAuxPrompt } from "@/eval/prompts.ts";
-import { gradedPath, runsPath } from "@/eval/paths.ts";
 import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
+import { gradedPath, runsPath } from "@/eval/paths.ts";
+import { loadAuxPrompt } from "@/eval/prompts.ts";
 import {
+  type GradedRow,
   GradedRowSchema,
+  type ModelGradeOrError,
   ModelGradeSchema,
   RunRowSchema,
-  type GradedRow,
-  type ModelGradeOrError,
 } from "@/eval/types.ts";
-import { errMsg } from "@/core/index.ts";
 
 const FORMAT_FOOTER = `
 Respond with a single JSON object - no prose, no code fences - matching
@@ -32,9 +32,7 @@ exactly this schema:
 const extractJsonObject = (text: string) =>
   extractJsonSpan(text, "{", "}", "no JSON object found in response");
 
-function summarizeIssues(
-  issues: { path: PropertyKey[]; message: string }[],
-) {
+function summarizeIssues(issues: { path: PropertyKey[]; message: string }[]) {
   return issues
     .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
     .join("; ");
@@ -87,7 +85,9 @@ export async function gradeWithModel(opts: {
     const cached = readJsonl(outPath).map((row, i) => {
       const result = GradedRowSchema.safeParse(row);
       if (!result.success) {
-        throw new Error(`cached graded row ${i} invalid: ${result.error.message}`);
+        throw new Error(
+          `cached graded row ${i} invalid: ${result.error.message}`,
+        );
       }
       return result.data;
     });

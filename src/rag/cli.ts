@@ -1,5 +1,5 @@
-import { Debug, makeCli, parseArgs, runMain } from "@/core/index.ts";
 import type { DieFn, Flags } from "@/core/index.ts";
+import { Debug, makeCli, parseArgs, runMain } from "@/core/index.ts";
 import { generateSyntheticDoc } from "@/rag/doc/generate.ts";
 import { runRag } from "@/rag/rag.ts";
 import type { ChunkerConfig, Retrieved } from "@/rag/types.ts";
@@ -82,7 +82,10 @@ function buildChunkerConfig(
   return {
     strategy: "semantic",
     sentenceWindow: getInt(flags, "semantic-window", 1, { min: 0 }),
-    breakpointPercentile: getFloat(flags, "semantic-percentile", 95, { min: 0, max: 100 }),
+    breakpointPercentile: getFloat(flags, "semantic-percentile", 95, {
+      min: 0,
+      max: 100,
+    }),
     minChunkChars: getInt(flags, "semantic-min-chars", 200, { min: 1 }),
     maxChunkChars: getInt(flags, "semantic-max-chars", 2000, { min: 1 }),
   };
@@ -114,9 +117,9 @@ async function cmdGenerateDoc(flags: Flags["flags"]) {
   const outPath = getString(flags, "out") ?? "./rag-handbook.md";
   const sections = getInt(flags, "sections", 12, { min: 1 });
   const model = getString(flags, "model");
-  const force = flags["force"] === true;
+  const force = flags.force === true;
 
-  if (await Bun.file(outPath).exists() && !force) {
+  if ((await Bun.file(outPath).exists()) && !force) {
     die(`${outPath} already exists (pass --force to overwrite)`);
   }
 
@@ -136,7 +139,7 @@ async function cmdGenerateDoc(flags: Flags["flags"]) {
 async function cmdQuery(positional: string[], flags: Flags["flags"]) {
   const docPath = positional[0];
   const question = positional.slice(1).join(" ");
-  if (!docPath || !question) die("query requires <doc-path> \"question\"");
+  if (!docPath || !question) die('query requires <doc-path> "question"');
 
   const strategy = getEnum(flags, "chunker", CHUNKERS, "structure");
   const k = getInt(flags, "k", 5, { min: 1 });
@@ -182,13 +185,17 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]) {
 async function cmdCompare(positional: string[], flags: Flags["flags"]) {
   const docPath = positional[0];
   const question = positional.slice(1).join(" ");
-  if (!docPath || !question) die("compare requires <doc-path> \"question\"");
+  if (!docPath || !question) die('compare requires <doc-path> "question"');
 
   const k = getInt(flags, "k", 5, { min: 1 });
   const retrieval = getEnum(flags, "retrieval", RETRIEVALS, "hybrid");
-  const generate = flags["generate"] === true;
+  const generate = flags.generate === true;
 
-  const strategies: Array<ChunkerConfig["strategy"]> = ["size", "structure", "semantic"];
+  const strategies: Array<ChunkerConfig["strategy"]> = [
+    "size",
+    "structure",
+    "semantic",
+  ];
   for (const strategy of strategies) {
     const chunkerConfig = buildChunkerConfig(strategy, {});
     process.stdout.write(`\n========== chunker: ${strategy} ==========\n`);
@@ -228,7 +235,7 @@ async function main(argv: readonly string[]) {
     return;
   }
   const { positional, flags } = parseArgs(argv.slice(1));
-  if (flags["debug"] === true) Debug.get().enable();
+  if (flags.debug === true) Debug.get().enable();
 
   switch (sub) {
     case "generate-doc":

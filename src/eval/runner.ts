@@ -1,18 +1,14 @@
 import * as fs from "node:fs";
+import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 import {
   addAssistantMessage,
   addUserMessage,
   type MessageParam,
 } from "@/core/index.ts";
-import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
-import { loadPromptVersion } from "@/eval/prompts.ts";
-import { datasetPath, runsPath } from "@/eval/paths.ts";
 import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
-import {
-  DatasetItemSchema,
-  RunRowSchema,
-  type RunRow,
-} from "@/eval/types.ts";
+import { datasetPath, runsPath } from "@/eval/paths.ts";
+import { loadPromptVersion } from "@/eval/prompts.ts";
+import { DatasetItemSchema, type RunRow, RunRowSchema } from "@/eval/types.ts";
 
 export async function runPromptOnDataset(opts: {
   name: string;
@@ -26,7 +22,9 @@ export async function runPromptOnDataset(opts: {
     const cached = readJsonl(outPath).map((row, i) => {
       const result = RunRowSchema.safeParse(row);
       if (!result.success) {
-        throw new Error(`cached runs row ${i} invalid: ${result.error.message}`);
+        throw new Error(
+          `cached runs row ${i} invalid: ${result.error.message}`,
+        );
       }
       return result.data;
     });
