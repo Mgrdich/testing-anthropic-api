@@ -3,9 +3,10 @@ import { runRepl, sendTurn } from "@/cli/repl.ts";
 import { readStdin } from "@/cli/stdin.ts";
 import { Debug, errMsg, type MessageParam, type Tool } from "@/core/index.ts";
 import {
-  connectLocalMcp,
+  connectMcpServers,
   loadMcpTools,
   type McpConnection,
+  selectServers,
 } from "@/mcp/index.ts";
 
 export async function runCli(argv: readonly string[]) {
@@ -25,16 +26,19 @@ export async function runCli(argv: readonly string[]) {
 
   if (args.debug) Debug.get().enable();
 
-  // --mcp was an explicit ask: if the server won't start, fail loudly rather
+  // --mcp was an explicit ask: if a server won't start, fail loudly rather
   // than silently degrading to a tool-less session.
-  let mcp: McpConnection | undefined;
+  let mcp: McpConnection[] | undefined;
   let mcpTools: Tool[] | undefined;
   if (args.mcp) {
     try {
-      mcp = await connectLocalMcp();
-      mcpTools = await loadMcpTools(mcp.client);
+      mcp = await connectMcpServers(selectServers(args.mcp));
+      const perServer = await Promise.all(
+        mcp.map((conn) => loadMcpTools(conn.client)),
+      );
+      mcpTools = perServer.flat();
     } catch (err) {
-      await mcp?.close().catch(() => {});
+      await Promise.all((mcp ?? []).map((c) => c.close().catch(() => {})));
       process.stderr.write(
         `error: failed to start MCP server: ${errMsg(err)}\n`,
       );
@@ -69,6 +73,6 @@ export async function runCli(argv: readonly string[]) {
       mcpTools,
     });
   } finally {
-    await mcp?.close();
+    await Promise.all((mcp ?? []).map((c) => c.close()));
   }
 }

@@ -24,7 +24,9 @@ stdin, drives readline, and prints.
   approval), plus the private `truncate`/`compactJson` formatters.
 - `mcp-turn.ts` — MCP turn construction: `handleMcpPrompt()` (the
   `#`-prefixed prompt path) and `buildMentionContent()` (the
-  `@resource` → XML-tagged content path). Both are no-ops without
+  `@resource` → XML-tagged content path). Both take the array of
+  connected servers and multiplex across them (prompts labelled by
+  server; mentions resolved first-hit-wins), and are no-ops without
   `--mcp`. The two sigils are exported constants `PROMPT_PREFIX` (`#`)
   and `MENTION_PREFIX` (`@`) — the single source of truth for the
   dispatch, the regex, every user-facing string, and the `--help`
@@ -38,13 +40,15 @@ stdin, drives readline, and prints.
    `error: …` + usage, exit 2.
 2. `--debug` flips the process-global `Debug` singleton once; nothing
    else threads debug state.
-3. `--mcp`: `connectLocalMcp()` + `loadMcpTools()` **before any turn**.
-   Failure is loud (`error: failed to start MCP server: …`, exit 1) —
-   never a silent fallback to a tool-less session. The connection is
-   closed in a `finally` that covers every REPL exit path (empty line,
-   `exit`/`quit`, Ctrl+C/D). Known quirk: the
+3. `--mcp`: `connectMcpServers(selectServers(args.mcp))` +
+   `loadMcpTools()` per connection (merged) **before any turn**. Bare
+   `--mcp` connects all registered servers; `--mcp docs,research` a
+   subset. Failure is loud (`error: failed to start MCP server: …`,
+   exit 1) — never a silent fallback to a tool-less session. Every
+   connection is closed in a `finally` that covers all REPL exit paths
+   (empty line, `exit`/`quit`, Ctrl+C/D). Known quirk: the
    `--once`-without-prompt path calls `process.exit(2)` inside the
-   `try`, which skips the `finally`; harmless, because the child's
+   `try`, which skips the `finally`; harmless, because the children's
    stdin closes when the parent dies.
 4. Initial prompt = positional `args.prompt ?? readStdin()`. If
    present, one `sendTurn` runs before the TTY check.
@@ -67,8 +71,9 @@ Per turn, in order:
    (non-text resources pass through as blocks; failed lookups warn and
    stay literal). Without `--mcp`, plain `addUserMessage`.
 2. **Tools branch** — taken when `--tools` is set *or* MCP tools are
-   loaded. Merges `selectTools(args.tools)` + `mcpTools`, throws on
-   duplicate names (the API 400s), builds hooks, and picks the runner:
+   loaded. Merges `selectTools(args.tools)` + `mcpTools` (the latter
+   already flattened across all connected servers), throws on duplicate
+   names (the API 400s), builds hooks, and picks the runner:
    `--runner sdk` → `runAgenticTurnSdk`, else `runAgenticTurn`. Always
    streams; ignores `--prefill`. A `stop_reason === "tool_use"` result
    means the `--max-iterations` cap fired — warn on stderr.

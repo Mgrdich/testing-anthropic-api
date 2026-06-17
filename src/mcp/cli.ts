@@ -23,7 +23,7 @@ import type { BetaToolRunContext } from "@anthropic-ai/sdk/lib/tools/BetaRunnabl
 import type { BetaMessage } from "@anthropic-ai/sdk/resources/beta";
 import { AnthropicClient, DEFAULT_MODEL, Debug, errMsg } from "@/core/index.ts";
 import {
-  connectLocalMcp,
+  connectDocsServer,
   mcpRunnableTools,
   resourceBlockText,
 } from "@/mcp/index.ts";
@@ -51,7 +51,7 @@ function say(facing: Facing, text: string) {
 if (process.argv.includes("--debug")) Debug.get().enable();
 const dbg = Debug.get();
 
-const mcp = await connectLocalMcp().catch((err) => {
+const mcp = await connectDocsServer().catch((err) => {
   process.stderr.write(`error: failed to start MCP server: ${errMsg(err)}\n`);
   process.exit(1);
 });

@@ -30,15 +30,17 @@ function parsePromptArgs(rest: string) {
 }
 
 /**
- * Handle a `#...` line as an MCP prompt invocation. `#prompts` (or `#help`)
- * lists what the server offers; `#<name> key=value …` fetches the prompt and
- * appends its (already XML-tagged) messages to the history. Returns true when
- * a turn was queued and the caller should proceed to the API request.
+ * Handle a `#...` line as an MCP prompt invocation, across every connected
+ * server. `#prompts` (or `#help`) lists what each live server offers (labelled
+ * by server name); `#<name> key=value …` finds the first live server that
+ * exposes that prompt, fetches it, and appends its (already XML-tagged)
+ * messages to the history. Returns true when a turn was queued and the caller
+ * should proceed to the API request.
  *
  * `#` is the prompt prefix; `/` is left free for future REPL commands.
  */
 export async function handleMcpPrompt(
-  mcp: McpConnection,
+  mcps: McpConnection[],
   text: string,
   messages: MessageParam[],
 ) {
@@ -47,27 +49,53 @@ export async function handleMcpPrompt(
   const name = body.slice(PROMPT_PREFIX.length).trim();
   const rest = space === -1 ? "" : text.slice(space + 1).trim();
 
-  if (!mcp.alive) {
-    process.stderr.write("error: MCP server is no longer running\n");
+  const live = mcps.filter((m) => m.alive);
+  if (live.length === 0) {
+    process.stderr.write("error: no MCP server is running\n");
     return false;
   }
+  // Only servers that advertise the prompts capability answer listPrompts;
+  // calling it on others is a JSON-RPC "method not found".
+  const promptServers = live.filter(
+    (m) => m.client.getServerCapabilities()?.prompts !== undefined,
+  );
 
   try {
     if (name === "prompts" || name === "help" || name === "") {
-      const prompts = await listMcpPrompts(mcp.client);
       process.stderr.write(
         `MCP prompts (invoke with ${PROMPT_PREFIX}<name> key=value …):\n`,
       );
-      for (const p of prompts) {
-        const argList = p.args.map((a) => `${a}=…`).join(" ");
-        const desc = p.description ? ` — ${p.description}` : "";
-        process.stderr.write(`  ${PROMPT_PREFIX}${p.name} ${argList}${desc}\n`);
+      for (const conn of promptServers) {
+        const prompts = await listMcpPrompts(conn.client);
+        for (const p of prompts) {
+          const argList = p.args.map((a) => `${a}=…`).join(" ");
+          const desc = p.description ? ` — ${p.description}` : "";
+          process.stderr.write(
+            `  ${PROMPT_PREFIX}${p.name} ${argList} [${conn.name}]${desc}\n`,
+          );
+        }
       }
       return false;
     }
 
+    // Find the first live server that exposes a prompt with this name.
+    let owner: McpConnection | undefined;
+    for (const conn of promptServers) {
+      const prompts = await listMcpPrompts(conn.client);
+      if (prompts.some((p) => p.name === name)) {
+        owner = conn;
+        break;
+      }
+    }
+    if (!owner) {
+      process.stderr.write(
+        `error: no MCP server exposes prompt '${PROMPT_PREFIX}${name}'\n`,
+      );
+      return false;
+    }
+
     const promptMessages = await getPromptMessages(
-      mcp.client,
+      owner.client,
       name,
       parsePromptArgs(rest),
     );
@@ -99,12 +127,13 @@ const MENTION_RE = new RegExp(
 
 /**
  * Build the user-turn content for a line that may carry `@resource`
- * mentions. Each resolvable mention is fetched from the MCP server and sent
- * as its own content block, wrapped in XML tags (matching the rag prompt
- * style); the user's text follows as the final block. Unresolvable mentions
- * warn and stay literal. Lines without mentions pass through as plain text.
+ * mentions. Each mention is resolved against every live server in turn (the
+ * first that has it wins) and sent as its own content block, wrapped in XML
+ * tags (matching the rag prompt style); the user's text follows as the final
+ * block. Unresolvable mentions warn and stay literal. Lines without mentions
+ * pass through as plain text.
  */
-export async function buildMentionContent(mcp: McpConnection, text: string) {
+export async function buildMentionContent(mcps: McpConnection[], text: string) {
   const refs = [
     ...new Set(
       [...text.matchAll(MENTION_RE)]
@@ -113,32 +142,45 @@ export async function buildMentionContent(mcp: McpConnection, text: string) {
     ),
   ];
   if (refs.length === 0) return text;
-  if (!mcp.alive) {
+  // Only servers that advertise the resources capability answer readResource.
+  const live = mcps.filter(
+    (m) => m.alive && m.client.getServerCapabilities()?.resources !== undefined,
+  );
+  if (live.length === 0) {
     process.stderr.write(
-      "warning: MCP server is no longer running; sending @mentions as literal text\n",
+      "warning: no MCP server with resources is running; sending @mentions as literal text\n",
     );
     return text;
   }
 
   const blocks: Exclude<MessageParam["content"], string> = [];
   for (const ref of refs) {
-    try {
-      const { uri, block } = await readResourceBlock(mcp.client, ref);
-      const text = resourceBlockText(block);
-      if (text !== undefined) {
-        blocks.push({
-          type: "text",
-          text: `<resource uri="${uri}">\n${text}\n</resource>`,
-        });
-      } else {
-        // Non-text resources (image/PDF) go through as-is — one cast at the
-        // beta → non-beta wire boundary, same JSON shape.
-        blocks.push(block as unknown as (typeof blocks)[number]);
+    let resolved = false;
+    let lastErr: unknown;
+    for (const conn of live) {
+      try {
+        const { uri, block } = await readResourceBlock(conn.client, ref);
+        const text = resourceBlockText(block);
+        if (text !== undefined) {
+          blocks.push({
+            type: "text",
+            text: `<resource uri="${uri}">\n${text}\n</resource>`,
+          });
+        } else {
+          // Non-text resources (image/PDF) go through as-is — one cast at the
+          // beta → non-beta wire boundary, same JSON shape.
+          blocks.push(block as unknown as (typeof blocks)[number]);
+        }
+        process.stderr.write(`[mcp] attached resource ${uri} [${conn.name}]\n`);
+        resolved = true;
+        break;
+      } catch (err) {
+        lastErr = err;
       }
-      process.stderr.write(`[mcp] attached resource ${uri}\n`);
-    } catch (err) {
+    }
+    if (!resolved) {
       process.stderr.write(
-        `warning: could not fetch MCP resource '${MENTION_PREFIX}${ref}': ${errMsg(err)}\n`,
+        `warning: could not fetch MCP resource '${MENTION_PREFIX}${ref}': ${errMsg(lastErr)}\n`,
       );
     }
   }

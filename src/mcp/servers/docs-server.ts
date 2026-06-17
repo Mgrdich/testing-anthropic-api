@@ -1,7 +1,8 @@
 /**
  * Local MCP server, spoken to over stdio. Spawned as a child process by
- * `connectLocalMcp()` (`bun run src/mcp/server.ts`), or run standalone for
- * inspection (`bun run mcp:server`, or via `bunx @modelcontextprotocol/inspector`).
+ * `connectMcpServer()` (`bun run src/mcp/servers/docs-server.ts`), or run
+ * standalone for inspection (`bun run mcp:server`, or via
+ * `bunx @modelcontextprotocol/inspector`).
  *
  * Deliberately does NOT import `@/core` — the server needs no Anthropic API
  * key, and keeping it dependency-free makes it a faithful "external server"
@@ -27,7 +28,7 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const DOCS_DIR = resolve(new URL("../../docs", import.meta.url).pathname);
+const DOCS_DIR = resolve(new URL("../../../docs", import.meta.url).pathname);
 
 function mimeFor(path: string) {
   return path.endsWith(".md") ? "text/markdown" : "text/plain";

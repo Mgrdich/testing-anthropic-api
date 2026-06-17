@@ -16,7 +16,7 @@ export type Args = {
   tools?: "all" | string[];
   maxIterations?: number;
   runner?: "local" | "sdk";
-  mcp: boolean;
+  mcp?: "all" | string[];
 };
 
 export function printHelp() {
@@ -46,8 +46,10 @@ Options:
   --runner <name>     Pick the tool-use loop: 'local' (default) uses our
                       hand-rolled runAgenticTurn; 'sdk' uses Anthropic's
                       client.beta.messages.toolRunner.
-  --mcp               Spawn the bundled MCP server (stdio) and expose its
-                      tools to the model. Combines with --tools; alone, it
+  --mcp [servers]     Spawn MCP servers (stdio) and expose their tools to the
+                      model. Bare flag connects all registered servers (docs,
+                      research); pass a comma-separated subset, e.g.
+                      --mcp docs,research. Combines with --tools; alone, it
                       enables the agentic loop with MCP tools only. In the
                       REPL: ${PROMPT_PREFIX}prompts lists MCP prompts,
                       ${PROMPT_PREFIX}<name> key=value invokes one, and
@@ -70,7 +72,6 @@ export function parseArgs(argv: readonly string[]) {
     once: false,
     debug: false,
     stream: false,
-    mcp: false,
   };
   const positional: string[] = [];
 
@@ -90,9 +91,28 @@ export function parseArgs(argv: readonly string[]) {
       case "--stream":
         out.stream = true;
         break;
-      case "--mcp":
-        out.mcp = true;
+      case "--mcp": {
+        // Same heuristic as --tools: consume the next arg only if it looks
+        // like a server-name list (identifier chars + commas, no spaces), so
+        // `--mcp "tell me about docs"` keeps the string as the prompt.
+        const next = argv[i + 1];
+        const looksLikeServerList =
+          next !== undefined && /^[a-zA-Z_][a-zA-Z0-9_,-]*$/.test(next);
+        if (!looksLikeServerList) {
+          out.mcp = "all";
+        } else {
+          i++;
+          const list = next
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          if (list.length === 0) {
+            throw new Error("--mcp list must contain at least one server name");
+          }
+          out.mcp = list;
+        }
         break;
+      }
       case "--model": {
         const v = argv[++i];
         if (!v) throw new Error("--model requires a value");

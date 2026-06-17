@@ -12,7 +12,8 @@ bun run build          # bundle to dist/index.js (target: bun, minified)
 bun run start [prompt] # run the bundled output
 bun run mcp --debug    # MCP demo: spawns the stdio server, exercises tools/prompts/resources
                        # (--debug recommended: section headers are Debug traces on stderr)
-bun run mcp:server     # run the MCP server standalone (for inspector tooling)
+bun run mcp:server     # run the docs MCP server standalone (for inspector tooling)
+bun run mcp:research-server  # run the research MCP server standalone (Wikipedia + sampling)
 bun run check          # Biome: format-verify + lint + import-sort (no writes)
 bun run check:write    # Biome: apply formatting, safe lint fixes, import-sort
 bun run format         # Biome: format src/**/*.ts in place
@@ -134,45 +135,62 @@ MCP landed as a top-level module (sibling of `cli/`/`core/`, superseding
 the earlier "sibling module in core/" note; see `src/mcp/CLAUDE.md` for
 the module doc):
 
-- **`server.ts`** is a standalone stdio MCP server built with
-  `@modelcontextprotocol/sdk` (`McpServer` + `StdioServerTransport`),
+The module is two symmetric folders — **`servers/`** (key-free stdio
+server entries + a registry) and **`client/`** (connection, sampling,
+SDK conversion helpers) — plus the `cli.ts` demo and the `index.ts`
+barrel. The split mirrors the protocol's two sides; the load-bearing rule
+is that **servers hold no API key** and reach the model only via sampling.
+
+- **`servers/docs-server.ts`** is a standalone stdio MCP server built
+  with `@modelcontextprotocol/sdk` (`McpServer` + `StdioServerTransport`),
   grounded in the repo's gitignored `docs/` folder (populated by the rag
   walkthrough; missing/empty is handled gracefully). It exposes two
-  non-mutating tools (`list_docs`, `read_doc` — names chosen not to
-  collide with the built-ins; `read_doc` refuses paths that escape
-  `docs/`), an XML-tagged `explain_topic` prompt, and a `docs://{+path}`
-  resource template whose `list` callback enumerates every file in
-  `docs/` and whose read callback serves one item. It must never write
-  to stdout (that's the JSON-RPC stream) and deliberately does not
-  import `@/core` (no API key needed).
-- **`client.ts`** spawns the server as a child process
-  (`bun run src/mcp/server.ts` via `StdioClientTransport`) and connects
-  with a 10s handshake timeout. Startup failure throws `McpConnectError`
-  (the CLI prints it and exits 1); mid-session death flips
-  `McpConnection.alive` and prints a one-time stderr warning.
+  non-mutating tools (`list_docs`, `read_doc` — `read_doc` refuses paths
+  that escape `docs/`), an XML-tagged `explain_topic` prompt, and a
+  `docs://{+path}` resource template. Never writes to stdout (that's the
+  JSON-RPC stream); does not import `@/core`.
+- **`servers/research-server.ts`** is a second stdio server. Its one tool,
+  `research(topic)`, fetches the full Wikipedia extract and then **uses MCP
+  sampling** to ask the *client* to summarize it
+  (`server.server.createMessage`), falling back to the raw extract if
+  sampling is unavailable. Also key-free — sampling is how it does model
+  work.
+- **`servers/index.ts`** is the registry: `MCP_SERVERS` and
+  `selectServers("all" | names)` (mirrors `selectTools`); the single
+  source of truth for which servers `--mcp` spawns.
+- **`client/connection.ts`** — `connectMcpServer(spec)` spawns one server
+  over `StdioClientTransport` (10s handshake timeout), advertising
+  `capabilities: { sampling: {} }` and installing the sampling handler
+  before connecting; returns `{ name, client, alive, close }`.
+  `connectMcpServers(specs)` connects several (loud-fail: close opened,
+  rethrow). Startup failure throws `McpConnectError` (CLI prints + exits
+  1); mid-session death flips `McpConnection.alive` and warns once.
+- **`client/sampling.ts`** answers `sampling/createMessage`: convert the
+  request's messages, run a one-shot via `addAssistantMessage` on
+  `SAMPLING_MODEL` (Haiku — defined in `core/constants.ts`), return the
+  summary. **The only MCP file that imports `@/core`** (the client owns
+  the key).
 - **Conversion to Claude types is the Anthropic SDK's job** — the
   `@anthropic-ai/sdk/helpers/beta/mcp` helpers, not hand-rolled mapping:
-  `mcpTools` (tools → `BetaRunnableTool`s, adapted to the local `Tool`
-  shape in `tools.ts` so both runners work unchanged), `mcpMessages`
-  (prompts → message params, `prompts.ts`), and `mcpResourceToContent`
-  (resources → content blocks, `resources.ts`; note `text/*` resources
-  become *document* blocks with a text source — use `resourceBlockText`
-  to extract). The MCP SDK `Client` doesn't structurally satisfy
-  `MCPClientLike` (its `callTool` return union includes a legacy shape);
-  the guard-then-convert step lives in one util, `mcpRunnableTools()` in
-  `tools.ts` (narrows via the `isMcpClientLike()` type guard, then calls
-  the SDK's `mcpTools()`), shared by `loadMcpTools` and `cli.ts` — never
-  a cast.
-- **CLI**: `--mcp` connects at startup and merges the server's tools
-  into the agentic loop (works with both `--runner` values, combines
-  with `--tools`; duplicate tool names throw). In `sendTurn`, a leading
-  `/` invokes an MCP prompt (`/prompts` lists them,
-  `/explain_topic topic="…" audience="…"` appends the prompt's messages
-  to history), and `@<docs file>` mentions (bare path like
-  `@northvale-tunnel-collapse.md` or full `docs://…` URI) fetch
-  resources and attach them as XML-tagged (`<resource uri="…">`) content
-  blocks ahead of the user text. The connection is closed in a `finally`
-  in `runCli`.
+  `mcpTools` (adapted to the local `Tool` shape in `client/tools.ts`),
+  `mcpMessages` (`client/prompts.ts`), and `mcpResourceToContent`
+  (`client/resources.ts`; `text/*` resources become *document* blocks —
+  use `resourceBlockText` to extract). The MCP SDK `Client` doesn't
+  structurally satisfy `MCPClientLike`; the guard-then-convert step lives
+  in one util, `mcpRunnableTools()` (narrows via `isMcpClientLike()`, then
+  calls `mcpTools()`), shared by `loadMcpTools` and `cli.ts` — never a cast.
+- **CLI**: `--mcp` connects all registered servers at startup (or a subset:
+  `--mcp docs,research`) and merges every server's tools into the agentic
+  loop (both `--runner` values; combines with `--tools`; duplicate names
+  throw). In `sendTurn`, a leading `#` invokes an MCP prompt (`#prompts`
+  lists them across servers, `#explain_topic topic="…" audience="…"`
+  appends the prompt's messages), and `@<resource>` mentions (bare
+  `@northvale-tunnel-collapse.md` or full `docs://…` URI) are resolved
+  against each server (first hit wins) and attached as XML-tagged
+  (`<resource uri="…">`) blocks ahead of the user text. All connections
+  close in a `finally` in `runCli`.
+  `bun run dev --mcp "research the Eiffel Tower"` is the end-to-end
+  sampling showcase.
 - **`cli.ts`** (`bun run mcp`) showcases the helpers natively against
   the live API: prompt → `mcpMessages` → `beta.messages.create`,
   resource → `mcpResourceToContent` → an XML-tagged turn, and
