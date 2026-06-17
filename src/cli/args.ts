@@ -1,5 +1,15 @@
 import { MENTION_PREFIX, PROMPT_PREFIX } from "@/cli/mcp-turn.ts";
 import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
+import {
+  BUILTIN_TOOLS,
+  type BuiltinToolName,
+  isBuiltinToolName,
+} from "@/core/index.ts";
+import {
+  isMcpServerName,
+  MCP_SERVERS,
+  type McpServerName,
+} from "@/mcp/index.ts";
 
 export type Args = {
   model: string;
@@ -13,10 +23,10 @@ export type Args = {
   stream: boolean;
   prefill?: string;
   stopSequences?: string[];
-  tools?: "all" | string[];
+  tools?: "all" | BuiltinToolName[];
   maxIterations?: number;
   runner?: "local" | "sdk";
-  mcp?: "all" | string[];
+  mcp?: "all" | McpServerName[];
 };
 
 export function printHelp() {
@@ -109,7 +119,15 @@ export function parseArgs(argv: readonly string[]) {
           if (list.length === 0) {
             throw new Error("--mcp list must contain at least one server name");
           }
-          out.mcp = list;
+          out.mcp = list.map((name) => {
+            if (!isMcpServerName(name)) {
+              const known = Object.keys(MCP_SERVERS).join(", ");
+              throw new Error(
+                `--mcp: unknown server '${name}' (known: ${known})`,
+              );
+            }
+            return name;
+          });
         }
         break;
       }
@@ -199,7 +217,15 @@ export function parseArgs(argv: readonly string[]) {
           if (list.length === 0) {
             throw new Error("--tools list must contain at least one tool name");
           }
-          out.tools = list;
+          out.tools = list.map((name) => {
+            if (!isBuiltinToolName(name)) {
+              const known = Object.keys(BUILTIN_TOOLS).join(", ");
+              throw new Error(
+                `--tools: unknown tool '${name}' (known: ${known})`,
+              );
+            }
+            return name;
+          });
         }
         break;
       }

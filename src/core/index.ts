@@ -28,12 +28,14 @@ export {
 } from "@/core/messages.ts";
 export type {
   AgenticHooks,
+  BuiltinToolName,
   RunAgenticOptions,
   Tool,
 } from "@/core/tools/index.ts";
 export {
   BUILTIN_TOOLS,
   defineTool,
+  isBuiltinToolName,
   MUTATING_TOOLS,
   runAgenticTurn,
   runAgenticTurnSdk,
