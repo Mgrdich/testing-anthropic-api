@@ -46,10 +46,11 @@ src/mcp/
   the raw extract if sampling is unavailable or returns nothing. Like
   `docs-server.ts`, it imports no `@/core` and holds no API key — the sampling
   round-trip is exactly how it does model work anyway.
-- `index.ts` — the **registry**: `MCP_SERVERS` (name → `{ name, scriptPath }`),
-  `selectServers("all" | string[])` (mirrors `selectTools`), and the
-  `McpServerSpec` type. Single source of truth for which servers `--mcp` can
-  spawn.
+- `index.ts` — the **registry**: `MCP_SERVERS` (name → `{ name, scriptPath }`,
+  via `satisfies` so the keys stay literal), the derived `McpServerName`
+  union, `isMcpServerName` (the parser validates `--mcp` names with it), and
+  `selectServers("all" | McpServerName[])`. Single source of truth for which
+  servers `--mcp` can spawn (mirrors `BUILTIN_TOOLS`/`selectTools`).
 
 ### `client/`
 

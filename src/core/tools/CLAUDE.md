@@ -42,9 +42,11 @@ type Tool = BetaTool & {
   parse?: (content: unknown) => unknown;
 };
 
-const BUILTIN_TOOLS: Record<string, Tool>;
+const BUILTIN_TOOLS = { … } satisfies Record<string, Tool>; // keys stay literal
+type BuiltinToolName = keyof typeof BUILTIN_TOOLS;
+function isBuiltinToolName(name: string): name is BuiltinToolName;
 const MUTATING_TOOLS: ReadonlySet<string>;
-function selectTools(filter: "all" | readonly string[]): Tool[];
+function selectTools(filter: "all" | readonly BuiltinToolName[]): Tool[];
 function defineTool<S extends z.ZodType>(spec: BetaZodToolParams<S>): Tool;
 
 type RunAgenticOptions = StreamAssistantOptions & {

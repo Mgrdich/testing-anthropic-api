@@ -2,5 +2,9 @@
 // conversion helpers) and the server registry. External callers import from
 // here, not the `client/` or `servers/` subfolders.
 export * from "@/mcp/client/index.ts";
-export type { McpServerSpec } from "@/mcp/servers/index.ts";
-export { MCP_SERVERS, selectServers } from "@/mcp/servers/index.ts";
+export type { McpServerName, McpServerSpec } from "@/mcp/servers/index.ts";
+export {
+  isMcpServerName,
+  MCP_SERVERS,
+  selectServers,
+} from "@/mcp/servers/index.ts";

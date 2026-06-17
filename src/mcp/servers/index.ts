@@ -18,26 +18,28 @@ function entry(file: string) {
   return new URL(`./${file}`, import.meta.url).pathname;
 }
 
-export const MCP_SERVERS: Record<string, McpServerSpec> = {
+// `satisfies` (not `: Record<string, McpServerSpec>`) so the literal keys
+// survive in the type — `McpServerName` is derived from them, and the CLI
+// parser validates `--mcp` names against this set.
+export const MCP_SERVERS = {
   docs: { name: "docs", scriptPath: entry("docs-server.ts") },
   research: { name: "research", scriptPath: entry("research-server.ts") },
-};
+} satisfies Record<string, McpServerSpec>;
+
+/** The name of a registered MCP server — the keys of `MCP_SERVERS`. */
+export type McpServerName = keyof typeof MCP_SERVERS;
+
+/** Runtime narrow of an arbitrary string to a registered server name. */
+export function isMcpServerName(name: string): name is McpServerName {
+  return name in MCP_SERVERS;
+}
 
 /**
  * Resolve a `--mcp` filter to server specs. `"all"` returns every registered
- * server; a name list looks each up, throwing on an unknown name (mirrors
- * `selectTools`).
+ * server; a name list maps to its specs. Names are validated at the CLI
+ * boundary (see `cli/args.ts`), mirroring `selectTools`.
  */
-export function selectServers(filter: "all" | readonly string[]) {
+export function selectServers(filter: "all" | readonly McpServerName[]) {
   if (filter === "all") return Object.values(MCP_SERVERS);
-
-  const known = Object.keys(MCP_SERVERS).join(", ");
-
-  return filter.map((name) => {
-    const spec = MCP_SERVERS[name];
-    if (!spec) {
-      throw new Error(`unknown MCP server: ${name} (known: ${known})`);
-    }
-    return spec;
-  });
+  return filter.map((name) => MCP_SERVERS[name]);
 }
