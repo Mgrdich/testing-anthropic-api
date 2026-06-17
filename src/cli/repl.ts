@@ -28,15 +28,15 @@ type TurnOpts = {
   args: Args;
   text: string;
   rl?: readline.Interface;
-  mcp?: McpConnection;
+  mcp?: McpConnection[];
   mcpTools?: Tool[];
 };
 
 export async function sendTurn(opts: TurnOpts) {
-  if (opts.mcp && opts.text.startsWith(PROMPT_PREFIX)) {
+  if (opts.mcp?.length && opts.text.startsWith(PROMPT_PREFIX)) {
     const queued = await handleMcpPrompt(opts.mcp, opts.text, opts.messages);
     if (!queued) return;
-  } else if (opts.mcp) {
+  } else if (opts.mcp?.length) {
     const content = await buildMentionContent(opts.mcp, opts.text);
     opts.messages.push({ role: "user", content });
   } else {
@@ -151,7 +151,7 @@ type ReplOpts = {
   messages: MessageParam[];
   args: Args;
   hadInitialTurn: boolean;
-  mcp?: McpConnection;
+  mcp?: McpConnection[];
   mcpTools?: Tool[];
 };
 
@@ -161,9 +161,10 @@ export async function runRepl(opts: ReplOpts) {
       ? "\n(conversational mode — empty line, 'exit', or 'quit' to leave)\n"
       : "Conversational mode. Type your message; empty line, 'exit', or 'quit' to leave.\n",
   );
-  if (opts.mcp) {
+  if (opts.mcp?.length) {
+    const names = opts.mcp.map((c) => c.name).join(", ");
     process.stdout.write(
-      `MCP connected: ${PROMPT_PREFIX}prompts lists prompts, ${PROMPT_PREFIX}<name> key=value invokes one, ${MENTION_PREFIX}<resource> attaches a resource.\n`,
+      `MCP connected (${names}): ${PROMPT_PREFIX}prompts lists prompts, ${PROMPT_PREFIX}<name> key=value invokes one, ${MENTION_PREFIX}<resource> attaches a resource.\n`,
     );
   }
 

@@ -9,7 +9,11 @@ export {
 } from "@/core/cli.ts";
 export type { InitOptions } from "@/core/client.ts";
 export { AnthropicClient } from "@/core/client.ts";
-export { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
+export {
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_MODEL,
+  SAMPLING_MODEL,
+} from "@/core/constants.ts";
 export { Debug } from "@/core/debug.ts";
 export type {
   AddAssistantOptions,

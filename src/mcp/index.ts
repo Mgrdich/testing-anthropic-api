@@ -1,15 +1,6 @@
-export type { McpConnection } from "@/mcp/client.ts";
-export { connectLocalMcp, McpConnectError } from "@/mcp/client.ts";
-export type { McpPromptInfo } from "@/mcp/prompts.ts";
-export { getPromptMessages, listMcpPrompts } from "@/mcp/prompts.ts";
-export type { McpResourceBlock, McpResourceInfo } from "@/mcp/resources.ts";
-export {
-  listMcpResources,
-  readResourceBlock,
-  resourceBlockText,
-} from "@/mcp/resources.ts";
-export {
-  isMcpClientLike,
-  loadMcpTools,
-  mcpRunnableTools,
-} from "@/mcp/tools.ts";
+// Public surface of the MCP module: the client side (connecting, sampling,
+// conversion helpers) and the server registry. External callers import from
+// here, not the `client/` or `servers/` subfolders.
+export * from "@/mcp/client/index.ts";
+export type { McpServerSpec } from "@/mcp/servers/index.ts";
+export { MCP_SERVERS, selectServers } from "@/mcp/servers/index.ts";
