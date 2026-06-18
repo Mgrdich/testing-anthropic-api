@@ -25,6 +25,7 @@ export {
   readResourceBlock,
   resourceBlockText,
 } from "@/mcp/client/resources.ts";
+export { installRootsHandler } from "@/mcp/client/roots.ts";
 export { installSamplingHandler } from "@/mcp/client/sampling.ts";
 export {
   isMcpClientLike,

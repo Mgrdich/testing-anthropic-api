@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { Debug, errMsg } from "@/core/index.ts";
+import { installRootsHandler } from "@/mcp/client/roots.ts";
 import { installSamplingHandler } from "@/mcp/client/sampling.ts";
 import { MCP_SERVERS, type McpServerSpec } from "@/mcp/servers/index.ts";
 
@@ -25,10 +26,11 @@ const CONNECT_TIMEOUT_MS = 10_000;
 
 /**
  * Spawn one registered stdio MCP server as a child process and connect to it.
- * The client advertises the `sampling` capability and installs the sampling
- * handler (see `sampling.ts`) before connecting, so a server can ask us to
- * run the model on its behalf. Throws `McpConnectError` if the spawn or the
- * MCP handshake fails (or times out).
+ * Before connecting, the client advertises the `sampling` and `roots`
+ * capabilities and installs both handlers (see `sampling.ts` / `roots.ts`), so
+ * a server can ask us to run the model on its behalf and discover which
+ * filesystem roots it may serve from. Throws `McpConnectError` if the spawn or
+ * the MCP handshake fails (or times out).
  */
 export async function connectMcpServer(
   spec: McpServerSpec,
@@ -49,9 +51,10 @@ export async function connectMcpServer(
   });
   const client = new Client(
     { name: "testing-anthropic", version: "0.1.0" },
-    { capabilities: { sampling: {} } },
+    { capabilities: { sampling: {}, roots: { listChanged: false } } },
   );
   installSamplingHandler(client);
+  installRootsHandler(client);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
