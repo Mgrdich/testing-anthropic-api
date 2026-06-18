@@ -147,8 +147,11 @@ is that **servers hold no API key** and reach the model only via sampling.
   walkthrough; missing/empty is handled gracefully). It exposes two
   non-mutating tools (`list_docs`, `read_doc` — `read_doc` refuses paths
   that escape `docs/`), an XML-tagged `explain_topic` prompt, and a
-  `docs://{+path}` resource template. Never writes to stdout (that's the
-  JSON-RPC stream); does not import `@/core`.
+  `docs://{+path}` resource template. The docs base dir is discovered from a
+  client-advertised `file://` root via the MCP `roots` capability (resolved
+  lazily + cached by `resolveDocsDir()`), with a hardcoded fallback for the
+  standalone/inspector path that advertises no roots. Never writes to stdout
+  (that's the JSON-RPC stream); does not import `@/core`.
 - **`servers/research-server.ts`** is a second stdio server. Its one tool,
   `research(topic)`, fetches the full Wikipedia extract and then **uses MCP
   sampling** to ask the *client* to summarize it
@@ -160,16 +163,22 @@ is that **servers hold no API key** and reach the model only via sampling.
   source of truth for which servers `--mcp` spawns.
 - **`client/connection.ts`** — `connectMcpServer(spec)` spawns one server
   over `StdioClientTransport` (10s handshake timeout), advertising
-  `capabilities: { sampling: {} }` and installing the sampling handler
-  before connecting; returns `{ name, client, alive, close }`.
+  `capabilities: { sampling: {}, roots: { listChanged: false } }` and
+  installing the sampling and roots handlers before connecting; returns
+  `{ name, client, alive, close }`.
   `connectMcpServers(specs)` connects several (loud-fail: close opened,
   rethrow). Startup failure throws `McpConnectError` (CLI prints + exits
   1); mid-session death flips `McpConnection.alive` and warns once.
 - **`client/sampling.ts`** answers `sampling/createMessage`: convert the
   request's messages, run a one-shot via `addAssistantMessage` on
   `SAMPLING_MODEL` (Haiku — defined in `core/constants.ts`), return the
-  summary. **The only MCP file that imports `@/core`** (the client owns
-  the key).
+  summary. **The only MCP file that touches the Anthropic client** (the
+  client owns the key).
+- **`client/roots.ts`** answers `roots/list`: returns the repo's `docs/`
+  dir (resolved from `process.cwd()`, `pathToFileURL`-encoded) as a single
+  `file://` root named `"docs"`, so the docs server discovers where to serve
+  from instead of hardcoding it. Imports `@/core` only for `Debug`, not the
+  Anthropic client.
 - **Conversion to Claude types is the Anthropic SDK's job** — the
   `@anthropic-ai/sdk/helpers/beta/mcp` helpers, not hand-rolled mapping:
   `mcpTools` (adapted to the local `Tool` shape in `client/tools.ts`),

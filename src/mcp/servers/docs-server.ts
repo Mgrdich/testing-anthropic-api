@@ -21,6 +21,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   McpServer,
   ResourceTemplate,
@@ -28,45 +29,80 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const DOCS_DIR = resolve(new URL("../../../docs", import.meta.url).pathname);
+/** Fallback docs dir when no roots-capable client advertised one. */
+const FALLBACK_DOCS_DIR = resolve(
+  new URL("../../../docs", import.meta.url).pathname,
+);
 
 function mimeFor(path: string) {
   return path.endsWith(".md") ? "text/markdown" : "text/plain";
 }
 
-/** All files under docs/, as sorted docs-relative paths. [] if docs/ is missing. */
+/** All files under the docs dir, as sorted relative paths. [] if it is missing. */
 async function listDocFiles() {
+  const dir = await resolveDocsDir();
   try {
-    const entries = await readdir(DOCS_DIR, {
+    const entries = await readdir(dir, {
       recursive: true,
       withFileTypes: true,
     });
     return entries
       .filter((e) => e.isFile() && !e.name.startsWith("."))
-      .map((e) => relative(DOCS_DIR, resolve(e.parentPath, e.name)))
+      .map((e) => relative(dir, resolve(e.parentPath, e.name)))
       .sort();
   } catch {
-    return []; // docs/ doesn't exist yet
+    return []; // docs dir doesn't exist yet
   }
 }
 
-/** Resolve a docs-relative path, refusing anything that escapes DOCS_DIR. */
-function docPath(path: string) {
-  const full = resolve(DOCS_DIR, path);
-  if (!full.startsWith(DOCS_DIR + sep)) {
+/** Resolve a docs-relative path, refusing anything that escapes the docs dir. */
+async function docPath(path: string) {
+  const dir = await resolveDocsDir();
+  const full = resolve(dir, path);
+  if (!full.startsWith(dir + sep)) {
     throw new Error(`path escapes the docs folder: ${path}`);
   }
   return full;
 }
 
 async function readDoc(path: string) {
-  return await readFile(docPath(path), "utf8");
+  return await readFile(await docPath(path), "utf8");
 }
 
 const server = new McpServer({
   name: "testing-anthropic-mcp",
   version: "0.1.0",
 });
+
+let docsDirPromise: Promise<string> | undefined;
+
+/**
+ * Resolve the docs base dir once, then cache it. Prefers a `file://` root the
+ * client advertised via `roots/list` (the contract is "root === the docs dir
+ * itself"); falls back to FALLBACK_DOCS_DIR when roots are unavailable/empty or
+ * the call fails. Lazy — must not run before the server has connected, since
+ * the client's capabilities aren't known until then. Callers only reach it
+ * from tool/resource handlers, which run after `server.connect`.
+ */
+function resolveDocsDir(): Promise<string> {
+  if (docsDirPromise) return docsDirPromise;
+  docsDirPromise = (async () => {
+    try {
+      if (!server.server.getClientCapabilities()?.roots) {
+        return FALLBACK_DOCS_DIR;
+      }
+      const { roots } = await server.server.listRoots();
+      const fileRoot = roots.find((r) => r.uri.startsWith("file://"));
+      return fileRoot ? fileURLToPath(fileRoot.uri) : FALLBACK_DOCS_DIR;
+    } catch (err) {
+      process.stderr.write(
+        `docs-server: roots/list failed, using fallback (${err instanceof Error ? err.message : String(err)})\n`,
+      );
+      return FALLBACK_DOCS_DIR;
+    }
+  })();
+  return docsDirPromise;
+}
 
 server.registerTool(
   "list_docs",

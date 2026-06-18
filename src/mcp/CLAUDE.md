@@ -35,10 +35,16 @@ src/mcp/
 - `docs-server.ts` — standalone stdio server (`bun run mcp:server`), built
   with `@modelcontextprotocol/sdk` and grounded in the repo's gitignored
   `docs/` folder (populated by the rag walkthrough; missing/empty docs/
-  degrades gracefully). Registers `list_docs` and `read_doc` tools (the
-  latter path-traversal-guarded to `docs/`), the XML-tagged `explain_topic`
-  prompt, and a `docs://{+path}` resource template — its `list` callback
-  enumerates every file in `docs/`; reading resolves one item.
+  degrades gracefully). The docs base dir is discovered from a
+  client-advertised `file://` root via `roots/list`, resolved lazily and
+  cached by `resolveDocsDir()` (memoizes the promise so concurrent first
+  callers share one round-trip), falling back to a hardcoded `import.meta.url`
+  path when no roots-capable client is present (the standalone/inspector
+  case). `docPath()` is therefore `async`. Registers `list_docs` and
+  `read_doc` tools (the latter path-traversal-guarded to the resolved dir),
+  the XML-tagged `explain_topic` prompt, and a `docs://{+path}` resource
+  template — its `list` callback enumerates every file; reading resolves one
+  item.
 - `research-server.ts` — standalone stdio server (`bun run mcp:research-server`).
   One tool, `research(topic)`: fetches the full plain-text Wikipedia extract
   (action API, capped at 10k chars) and then **uses MCP sampling** to ask the
@@ -56,10 +62,18 @@ src/mcp/
 
 - `connection.ts` — `connectMcpServer(spec)` spawns one server over
   `StdioClientTransport` and returns `{ name, client, alive, close }`; it
-  advertises `capabilities: { sampling: {} }` and installs the sampling
-  handler before connecting. `connectMcpServers(specs)` connects several
-  (loud-fail: close the opened ones and rethrow if any fails).
-  `connectDocsServer()` is the docs-only shorthand the demo uses.
+  advertises `capabilities: { sampling: {}, roots: { listChanged: false } }`
+  and installs the sampling **and** roots handlers before connecting.
+  `connectMcpServers(specs)` connects several (loud-fail: close the opened
+  ones and rethrow if any fails). `connectDocsServer()` is the docs-only
+  shorthand the demo uses.
+- `roots.ts` — `installRootsHandler(client)` registers a handler for
+  `roots/list`: it answers with the repo's `docs/` dir (resolved from
+  `process.cwd()`, `pathToFileURL`-encoded) as a single `file://` root named
+  `"docs"`. The contract is "root === the docs dir itself", so the server uses
+  the URI directly as its base dir. Advertised as `roots: { listChanged: false }`
+  (the docs root is fixed for a session — no change notifications). Imports
+  `@/core` only for `Debug`.
 - `sampling.ts` — `installSamplingHandler(client)` registers a handler for
   `sampling/createMessage`: it converts the request's messages to
   `MessageParam[]`, runs a one-shot via `addAssistantMessage` on
@@ -165,6 +179,14 @@ Piped stdin exercises the same paths single-shot
   `capabilities: { sampling: {} }` *and* `installSamplingHandler` before
   `client.connect`, or servers' `createMessage` calls error. Keep model
   defaults (incl. `SAMPLING_MODEL`) in `core/constants.ts`.
+- **Roots resolution is lazy + cached, and must never run at module load.**
+  The connection advertises `roots: { listChanged: false }` and installs
+  `installRootsHandler` before `client.connect` (parallel to sampling). The
+  docs server's `resolveDocsDir()` may only call `server.server.listRoots()`
+  *after* the handshake — so it runs lazily from tool/resource callbacks,
+  never at top level, gated on `getClientCapabilities()?.roots`. The
+  standalone/inspector path advertises no `roots` capability, so the
+  hardcoded `FALLBACK_DOCS_DIR` is required, not optional.
 - **The `Tool` adapter flattens to text.** `loadMcpTools` wraps each
   runnable tool's `run` to return a string (local `Tool` contract): text
   blocks pass verbatim, any other block type degrades to a `[type]`
@@ -218,7 +240,9 @@ should return `{ content: [{ type: "text", text }] }`. Nothing on the
 client side needs changing.
 
 The docs-backed capabilities share two helpers in `docs-server.ts`:
-`listDocFiles()` (recursive `docs/` listing; `[]` when the folder is
-missing) and `docPath()` (rejects paths that resolve outside `docs/`).
-New file-serving capabilities should go through them rather than calling
+`listDocFiles()` (recursive listing; `[]` when the folder is missing) and
+`docPath()` (rejects paths that resolve outside the docs dir). Both await
+`resolveDocsDir()`, which discovers the base dir from the client's `roots`
+(hardcoded fallback otherwise) and caches it — so both are `async`. New
+file-serving capabilities should go through them rather than calling
 `readFile` with model-supplied paths directly.
