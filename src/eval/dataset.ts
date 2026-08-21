@@ -1,10 +1,10 @@
 import * as fs from "node:fs";
+import { z } from "zod";
 import {
-  addAssistantMessage,
   addUserMessage,
   type MessageParam,
+  parseAssistantMessage,
 } from "@/core/index.ts";
-import { extractJsonSpan } from "@/eval/json.ts";
 import { writeJsonl } from "@/eval/jsonl.ts";
 import { datasetPath } from "@/eval/paths.ts";
 import { loadAuxPrompt } from "@/eval/prompts.ts";
@@ -12,20 +12,14 @@ import { type DatasetItem, DatasetItemSchema } from "@/eval/types.ts";
 
 const GEN_MODEL = "claude-haiku-4-5-20251001";
 const GEN_MAX_TOKENS = 4096;
-// TODO: replace prefill + stop with a tool-use call. A tool whose
-// input_schema is a JSON array of DatasetItem will give us structured
-// output without prefill hacks, stop-sequence brittleness, or
-// prose-extraction fallbacks.
-//
-// Until then: prefill opens a ```json fenced block AND the opening
-// `[`, and stop is the closing `]` glued to the closing fence. The
-// multi-char stop won't collide with `]` inside item content (unlike a
-// bare `]` stop). Prefill must not end with whitespace per the API.
-const GEN_PREFILL = "```json\n[";
-const GEN_STOP = "]\n```";
 
-const extractJsonArray = (text: string) =>
-  extractJsonSpan(text, "[", "]", "model did not return a JSON array");
+// Structured output: the model is constrained to emit a JSON object whose
+// `items` array matches DatasetItemSchema. This replaces the old prefill
+// (` ```json\n[ `) + stop (` ]\n``` `) fencing, the `[${text}]`
+// reconstruction, and the bracket-scraping/per-item drop fallback — the SDK
+// parses and Zod-validates the whole payload for us. (The output format wraps
+// a single object, so the array is nested under `items`.)
+const GenResultSchema = z.object({ items: z.array(DatasetItemSchema) });
 
 export async function generateDataset(opts: {
   name: string;
@@ -43,77 +37,18 @@ export async function generateDataset(opts: {
   );
 
   const messages: MessageParam[] = [];
-  addUserMessage(
-    messages,
-    `Generate ${opts.count} items now. Respond with only the JSON array.`,
-  );
+  addUserMessage(messages, `Generate ${opts.count} items now.`);
 
-  const response = await addAssistantMessage(
-    messages,
-    {
-      model: GEN_MODEL,
-      max_tokens: GEN_MAX_TOKENS,
-      system,
-      stop_sequences: [GEN_STOP],
-    },
-    GEN_PREFILL,
-  );
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (textBlock?.type !== "text") {
-    throw new Error("model response had no text block");
-  }
-
-  // Body returned by the API is what came between the prefill `[` and
-  // the stop `]\n```` — i.e. just the items. We reconstruct the full
-  // JSON array by wrapping with `[ ... ]`. Stop sequences are consumed
-  // by the API; if the stop didn't fire, the body was truncated (likely
-  // max_tokens) and we surface the parse error rather than paper over it.
-  if (
-    response.stop_reason !== "stop_sequence" ||
-    response.stop_sequence !== GEN_STOP
-  ) {
-    process.stderr.write(
-      `warning: gen did not hit closing fence (stop_reason=${response.stop_reason}); output may be truncated\n`,
-    );
-  }
-
-  const reconstructed = `[${textBlock.text}]`;
-
-  if (process.env.EVAL_DEBUG) {
-    process.stderr.write(
-      `[eval gen] stop_reason=${response.stop_reason} stop_seq=${JSON.stringify(response.stop_sequence)}\n`,
-    );
-    process.stderr.write(`[eval gen] reconstructed:\n${reconstructed}\n`);
-  }
-
-  const raw = extractJsonArray(reconstructed);
-  if (!Array.isArray(raw)) {
-    throw new Error(`expected a JSON array, got ${typeof raw}`);
-  }
-
-  const items: DatasetItem[] = [];
-  const errors: string[] = [];
-  raw.forEach((row, i) => {
-    const result = DatasetItemSchema.safeParse(row);
-    if (result.success) items.push(result.data);
-    else
-      errors.push(
-        `item ${i}: ${result.error.issues
-          .map((iss) => `${iss.path.join(".") || "<root>"}: ${iss.message}`)
-          .join("; ")}`,
-      );
+  const { parsed } = await parseAssistantMessage(messages, GenResultSchema, {
+    model: GEN_MODEL,
+    max_tokens: GEN_MAX_TOKENS,
+    system,
   });
 
+  const items: DatasetItem[] = parsed.items;
   if (items.length === 0) {
     throw new Error(
-      `no valid items in model response. Errors:\n  ${errors.join("\n  ")}`,
-    );
-  }
-
-  if (errors.length > 0) {
-    process.stderr.write(
-      `warning: dropped ${errors.length} invalid item(s):\n  ${errors.join("\n  ")}\n`,
+      `model returned 0 items (expected ${opts.count}); check generate.txt or raise GEN_MAX_TOKENS`,
     );
   }
 

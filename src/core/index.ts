@@ -18,12 +18,14 @@ export { Debug } from "@/core/debug.ts";
 export type {
   AddAssistantOptions,
   MessageParam,
+  ParseAssistantOptions,
   StreamAssistantOptions,
 } from "@/core/messages.ts";
 export {
   addAssistantMessage,
   addUserMessage,
   extractText,
+  parseAssistantMessage,
   streamAssistantMessage,
 } from "@/core/messages.ts";
 export type {

@@ -177,18 +177,24 @@ do anything deterministic.
 
 Generates `evals/datasets/<name>.jsonl` using Haiku
 (`claude-haiku-4-5-20251001`, hardcoded). System prompt is the
-user's `generate.txt`; `{count}` placeholder is substituted. Uses
-prefill ` ```json\n[ ` and stop `]\n``` ` for structured output (see
-the TODO in `dataset.ts` for the eventual tool-use migration).
+user's `generate.txt`; `{count}` placeholder is substituted. Uses the
+SDK's structured-output feature (`parseAssistantMessage` in
+`core/messages.ts` → `beta.messages.parse` with
+`betaZodOutputFormat(z.object({ items: z.array(DatasetItemSchema) }))`),
+so the model is schema-constrained — no prefill/stop fencing or
+bracket-scraping.
 
 | Flag      | Type    | Default | Effect                                                                                  |
 |-----------|---------|---------|-----------------------------------------------------------------------------------------|
 | `--count` | int > 0 | `10`    | Number of items to generate. Substituted into `{count}` placeholder of `generate.txt`.  |
 | `--force` | bool    | off     | Overwrite an existing dataset file. Without it, the command refuses to clobber.         |
 
-Items are validated against `DatasetItemSchema` (requires
-`input: string`); invalid items are dropped with a stderr warning
-rather than failing the whole batch.
+The structured-output constraint makes the SDK enforce
+`DatasetItemSchema` on the whole payload (the call fails on a schema
+violation — no per-item drop), and an empty `items` array throws
+immediately. Note the SDK forces `additionalProperties: false`, so
+generation emits only `input`/`reference`; extra per-item fields must be
+added to the dataset by hand (the on-disk schema still accepts them).
 
 ### `run <name> <version> [--model <id>] [--force]`
 
@@ -229,7 +235,9 @@ count, and error count.
 ### `grade <name> <version> [--model <id>] [--force]`
 
 Runs the LLM-as-judge against every runs row using the user's
-`judge.txt` plus a fixed strict-JSON response footer. Writes
+`judge.txt` as the system prompt. The response is schema-constrained
+via structured output (`parseAssistantMessage` with `ModelGradeSchema`),
+so no JSON-format footer is appended. Writes
 `evals/results/<name>/<version>.graded.jsonl`.
 
 | Flag      | Type   | Default                        | Effect                                                                                  |

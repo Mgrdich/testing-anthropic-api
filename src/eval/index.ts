@@ -9,7 +9,6 @@ export { gradeWithCode } from "@/eval/codeGrader.ts";
 export type { CombineWeights } from "@/eval/combineGrader.ts";
 export { combineGrader } from "@/eval/combineGrader.ts";
 export { generateDataset } from "@/eval/dataset.ts";
-export { extractJsonSpan } from "@/eval/json.ts";
 export { appendJsonl, readJsonl, writeJsonl } from "@/eval/jsonl.ts";
 export { gradeWithModel } from "@/eval/modelGrader.ts";
 export {
