@@ -1,12 +1,11 @@
 import * as fs from "node:fs";
 import { DEFAULT_MAX_TOKENS, DEFAULT_MODEL } from "@/core/constants.ts";
 import {
-  addAssistantMessage,
   addUserMessage,
   errMsg,
   type MessageParam,
+  parseAssistantMessage,
 } from "@/core/index.ts";
-import { extractJsonSpan } from "@/eval/json.ts";
 import { readJsonl, writeJsonl } from "@/eval/jsonl.ts";
 import { gradedPath, runsPath } from "@/eval/paths.ts";
 import { loadAuxPrompt } from "@/eval/prompts.ts";
@@ -17,26 +16,6 @@ import {
   ModelGradeSchema,
   RunRowSchema,
 } from "@/eval/types.ts";
-
-const FORMAT_FOOTER = `
-Respond with a single JSON object - no prose, no code fences - matching
-exactly this schema:
-{
-  "strengths":  [string, ...],
-  "weaknesses": [string, ...],
-  "reasoning":  string,
-  "score":      integer 1-5
-}
-`;
-
-const extractJsonObject = (text: string) =>
-  extractJsonSpan(text, "{", "}", "no JSON object found in response");
-
-function summarizeIssues(issues: { path: PropertyKey[]; message: string }[]) {
-  return issues
-    .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
-    .join("; ");
-}
 
 function summarizeGradedRows(rows: readonly GradedRow[]) {
   const histogram: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -102,8 +81,9 @@ export async function gradeWithModel(opts: {
     };
   }
 
-  const judgeBody = loadAuxPrompt(opts.name, "judge");
-  const system = judgeBody + FORMAT_FOOTER;
+  // Structured output carries the response schema (ModelGradeSchema), so the
+  // judge prompt no longer needs a hand-written JSON-format footer.
+  const system = loadAuxPrompt(opts.name, "judge");
   const model = opts.model ?? DEFAULT_MODEL;
 
   const runs = readJsonl(runsPath(opts.name, opts.version)).map((row, i) => {
@@ -125,32 +105,24 @@ export async function gradeWithModel(opts: {
       `<input>\n${run.input}\n</input>\n\n<reference>\n${run.reference ?? "(none)"}\n</reference>\n\n<output>\n${run.output}\n</output>`,
     );
 
-    const response = await addAssistantMessage(messages, {
-      model,
-      max_tokens: DEFAULT_MAX_TOKENS,
-      system,
-    });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw = textBlock && textBlock.type === "text" ? textBlock.text : "";
-
     let modelResult: ModelGradeOrError;
     try {
-      const parsed = extractJsonObject(raw);
-      const validated = ModelGradeSchema.safeParse(parsed);
-      if (validated.success) {
-        modelResult = validated.data;
-      } else {
-        modelResult = {
-          error: `malformed judge output: ${summarizeIssues(validated.error.issues)}`,
-          raw,
-        };
-      }
+      const { parsed } = await parseAssistantMessage(
+        messages,
+        ModelGradeSchema,
+        {
+          model,
+          max_tokens: DEFAULT_MAX_TOKENS,
+          system,
+        },
+      );
+      modelResult = parsed;
     } catch (e) {
-      modelResult = {
-        error: `parse failed: ${errMsg(e)}`,
-        raw,
-      };
+      // A refusal, truncation, or schema-validation failure yields an error
+      // row rather than crashing the batch. The SDK throws before returning,
+      // so the raw model text isn't recoverable here — the error message
+      // carries the failure detail instead.
+      modelResult = { error: `judge failed: ${errMsg(e)}`, raw: "" };
     }
 
     const row: GradedRow = { ...run, model: modelResult };

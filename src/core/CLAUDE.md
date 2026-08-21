@@ -36,6 +36,7 @@ addUserMessage(messages, text)                       // push user turn
 addAssistantMessage(messages, opts?, prefill?)       // create() + push
 streamAssistantMessage(messages, opts?, onStream?, prefill?)
                                                      // stream() + push
+parseAssistantMessage(messages, zodSchema, opts?)    // structured output + push
 extractText(content)                                 // join text blocks
 ```
 
@@ -49,6 +50,15 @@ extractText(content)                                 // join text blocks
   optional `onStream(stream)` callback (callers wire `.on("text", …)`
   etc.), then awaits `finalMessage()` and pushes it — history is
   identical to the non-streaming path.
+- **Structured output:** `parseAssistantMessage(messages, schema, opts?)`
+  derives a JSON-schema output format from a Zod `schema` via the SDK's
+  structured-outputs feature (`beta.messages.parse` +
+  `betaZodOutputFormat`; the beta header is auto-sent). The model is
+  constrained to emit conforming JSON — no prefill/stop hacks or prose
+  extraction. Returns `{ parsed, text }` (validated value + raw JSON
+  text) and pushes the assistant turn like the others. `ParseAssistantOptions`
+  is a small explicit type (`model`/`max_tokens`/`system`) since the beta
+  request shape differs from the non-beta primitives.
 - **Prefill contract:** when `prefill` is set, the request gets a
   trailing `{role:"assistant", content:prefill}` and the response's
   first text block is re-merged with the prefill before pushing, so

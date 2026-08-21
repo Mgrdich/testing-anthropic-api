@@ -38,19 +38,19 @@ directly addresses the question, no preamble like "Sure, ..." or
 "The answer is ...". Plain declarative tone.
 </reference_style>
 
-<custom_fields>
-TODO: list any extra fields your code-eval.ts or judge.txt expects on
-each item (e.g. "allowed", "must_contain", "max_chars"). Delete this
-block if you don't need any.
-</custom_fields>
-
-Produce a JSON array of {count} items. Each item must have at minimum:
+Produce {count} items. Each item must have:
   - "input":     matching <input_style>
   - "reference": matching <reference_style>
-  - plus any fields declared in <custom_fields>
 
-Vary difficulty and topic across items. Respond with the JSON array
-only - no prose, no code fences.
+Vary difficulty and topic across items. The harness enforces the JSON
+output shape via structured outputs, so focus on item quality rather
+than formatting.
+
+Note: structured-output generation emits only "input" and "reference".
+If your code-eval.ts or judge.txt needs extra per-item fields (e.g.
+"allowed", "must_contain", "max_chars"), add them to the generated
+<name>.jsonl by hand — the dataset schema still accepts arbitrary
+fields; only this generation step is constrained to input/reference.
 `;
 
 const JUDGE_TEMPLATE = `You are grading an assistant's response.
