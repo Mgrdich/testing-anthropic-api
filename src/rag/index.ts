@@ -9,7 +9,12 @@ export { generateSyntheticDoc } from "@/rag/doc/generate.ts";
 export type { HandbookTopic } from "@/rag/doc/template.ts";
 export { TOPICS } from "@/rag/doc/template.ts";
 export { Embedder } from "@/rag/embedder.ts";
-export { answerWithClaude, buildContext } from "@/rag/generate-answer.ts";
+export type { RagAnswer, RagCitation } from "@/rag/generate-answer.ts";
+export {
+  answerWithClaude,
+  buildContext,
+  buildSearchResultContent,
+} from "@/rag/generate-answer.ts";
 export type { HybridRanking } from "@/rag/hybrid.ts";
 export { retrieveHybrid, rrf } from "@/rag/hybrid.ts";
 export { dot, l2Normalize } from "@/rag/math.ts";

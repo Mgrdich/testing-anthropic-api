@@ -21,9 +21,11 @@ Subcommands:
       Generate evals/datasets/<name>.jsonl using Haiku.
       Default --count: 10. --force overwrites existing dataset.
 
-  run <name> <version> [--model id] [--force]
+  run <name> <version> [--model id] [--batch] [--force]
       Run the prompt against the dataset; write v<N>.runs.jsonl.
       Default --model: project DEFAULT_MODEL.
+      --batch submits all items as one Message Batch (50% cost,
+      async — polls until the batch ends) instead of sequential calls.
       Cached if v<N>.runs.jsonl exists; --force overwrites.
 
   code <name> <version> [--force]
@@ -92,8 +94,15 @@ async function main(argv: readonly string[]) {
       const version = positional[1];
       if (!name || !version) die("run requires <name> <version>");
       const model = getString(flags, "model");
+      const batch = flags.batch === true;
       const force = flags.force === true;
-      const result = await runPromptOnDataset({ name, version, model, force });
+      const result = await runPromptOnDataset({
+        name,
+        version,
+        model,
+        batch,
+        force,
+      });
       const verb = result.cached ? "cached" : "wrote";
       process.stdout.write(`${verb} ${result.path} (${result.count} rows)\n`);
       return;

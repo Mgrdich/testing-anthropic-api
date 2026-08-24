@@ -39,6 +39,12 @@ export async function runAgenticTurnSdk(
   // Wrap each tool to emit hooks + gate mutating calls. The SDK's
   // `runRunnableTool` calls run(parsed, ctx) directly — no built-in event
   // hooks — so we have to inject the events here.
+  //
+  // The spread carries each tool's wire fields through untouched, which is
+  // what lets Anthropic-defined tools work here with no special case: the
+  // memory tool arrives as the SDK's own `betaMemoryTool(handlers)` product
+  // (`{type: "memory_20250818", name: "memory", parse, run}`) and the runner
+  // consumes it verbatim, exactly as if we had built it inline.
   const wrapped = tools.map((t) => ({
     ...t,
     run: async (args: unknown, ctx?: BetaToolRunContext) => {

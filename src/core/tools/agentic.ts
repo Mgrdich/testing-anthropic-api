@@ -5,7 +5,7 @@ import {
   type StreamAssistantOptions,
   streamAssistantMessage,
 } from "@/core/messages.ts";
-import type { Tool } from "@/core/tools/types.ts";
+import { isAnthropicDefinedTool, type Tool } from "@/core/tools/types.ts";
 import { errMsg } from "@/core/util.ts";
 
 export type AgenticHooks = {
@@ -15,7 +15,11 @@ export type AgenticHooks = {
     stop_reason: Anthropic.Message["stop_reason"];
     tool_use_blocks: number;
   }) => void;
-  onToolCall?: (name: string, input: unknown) => void;
+  // `caller` is the tool_use block's caller discriminator: "direct" for a
+  // normal model-issued call, or the code-execution tool type when the call
+  // came from a PTC script running in the container. Only the local runner
+  // supplies it (the SDK runner has no per-call block to read it from).
+  onToolCall?: (name: string, input: unknown, caller?: string) => void;
   onToolResult?: (name: string, result: string, isError: boolean) => void;
   // Predicate identifying tools whose execution must be confirmed by the
   // user via `approveMutating`. The mutating set lives outside the Tool
@@ -24,13 +28,51 @@ export type AgenticHooks = {
   approveMutating?: (name: string, input: unknown) => Promise<boolean>;
 };
 
+/** One member of a tool def's `allowed_callers` list. */
+export type ToolCaller = NonNullable<Anthropic.Tool["allowed_callers"]>[number];
+
+/** Wire type of the code-execution tool that hosts programmatic tool calling. */
+export const PTC_TOOL_TYPE = "code_execution_20260120";
+
+/**
+ * The Anthropic-hosted tool entry that turns on **programmatic tool calling**:
+ * Claude writes a script in the code-execution container and the container
+ * calls our tools as functions, so intermediate results never enter the
+ * model's context. Goes out in `server_tools` — the API owns both its schema
+ * and its execution, so there is no local executor and it is not a `Tool`.
+ */
+export const PTC_CODE_EXECUTION_TOOL = {
+  type: PTC_TOOL_TYPE,
+  name: "code_execution",
+} as const satisfies Anthropic.ToolUnion;
+
 export type RunAgenticOptions = StreamAssistantOptions & {
   // Cap on API iterations. Each iteration is one assistant response + one
-  // round of tool execution. If unset, the loop runs until the model emits
-  // a non-`tool_use` stop_reason. When the cap is hit, the function returns
-  // the last assistant response (which will still have stop_reason="tool_use",
-  // letting the caller detect that the cap fired).
+  // round of tool execution (or one `pause_turn` resume). If unset, the loop
+  // runs until the model emits a terminal stop_reason. When the cap is hit,
+  // the function returns the last assistant response (which will still have
+  // stop_reason="tool_use"/"pause_turn", letting the caller detect that the
+  // cap fired).
   max_iterations?: number;
+  /**
+   * Anthropic-hosted tool definitions appended verbatim to the wire `tools`
+   * array, next to the client-side `tools` argument. They carry no executor —
+   * the API runs them — so they never appear in `toolByName`.
+   * `PTC_CODE_EXECUTION_TOOL` is the one shipped today.
+   */
+  server_tools?: readonly Anthropic.ToolUnion[];
+  /**
+   * Stamped onto every client-side tool def. Programmatic tool calling sets
+   * `[PTC_TOOL_TYPE]` so the model may only reach these tools from inside the
+   * code-execution container. Unset = the API default (`["direct"]`).
+   */
+  allowed_callers?: readonly ToolCaller[];
+  /**
+   * Drop `strict` from the custom-tool projection. `defineTool` turns strict
+   * tool use on for every built-in, and the API rejects strict tools when
+   * programmatic tool calling is enabled — so the PTC path omits it.
+   */
+  omit_strict?: boolean;
 };
 
 export async function runAgenticTurn(
@@ -39,27 +81,76 @@ export async function runAgenticTurn(
   tools: readonly Tool[],
   hooks: AgenticHooks = {},
 ) {
-  const { max_iterations, ...apiOpts } = opts;
+  const {
+    max_iterations,
+    server_tools,
+    allowed_callers,
+    omit_strict,
+    ...apiOpts
+  } = opts;
 
-  // Wire boundary: our Tool carries the beta input_schema type (the SDK's
-  // betaZodTool produces it), but we send via the non-beta messages API.
-  // The JSON shape is identical — only the TS `required: readonly string[]`
-  // variant differs — so a type assertion is safe.
-  const toolDefs: Anthropic.Tool[] = tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema as Anthropic.Tool.InputSchema,
-  }));
+  // Wire boundary. Two projections, one per Tool flavor, plus the
+  // Anthropic-hosted `server_tools` appended verbatim:
+  //
+  // - Anthropic-defined tools (memory) go out as `{type, name}`. The model
+  //   owns their schema, so there is nothing else to send. The cast is
+  //   because `Anthropic.ToolUnion`'s members pin `name` to a literal per
+  //   `type` (`name: "memory"` for `memory_20250818`), which a
+  //   `{type: string, name: string}` pair can't satisfy structurally.
+  // - Custom tools carry the beta `input_schema` type (the SDK's
+  //   betaZodTool produces it) but we send via the non-beta messages API.
+  //   The JSON shape is identical — only the TS `required: readonly
+  //   string[]` variant differs — so a type assertion is safe. `strict` is
+  //   forwarded so `defineTool`'s strict tool use survives the projection,
+  //   unless `omit_strict` drops it (strict is incompatible with PTC).
+  //
+  // `allowed_callers` is stamped onto both client-side flavors, never onto
+  // the server tool that hosts them.
+  const callers =
+    allowed_callers === undefined
+      ? {}
+      : { allowed_callers: [...allowed_callers] };
+  const toolDefs: Anthropic.ToolUnion[] = [
+    ...tools.map((t) =>
+      isAnthropicDefinedTool(t)
+        ? ({
+            type: t.type,
+            name: t.name,
+            ...callers,
+          } as unknown as Anthropic.ToolUnion)
+        : {
+            name: t.name,
+            description: t.description,
+            input_schema: t.input_schema as Anthropic.Tool.InputSchema,
+            ...(t.strict === undefined || omit_strict
+              ? {}
+              : { strict: t.strict }),
+            ...callers,
+          },
+    ),
+    ...(server_tools ?? []),
+  ];
   const toolByName = new Map(tools.map((t) => [t.name, t]));
+
+  // Container id for the code-execution sandbox behind programmatic tool
+  // calling. The API mints one on the first round that runs code and returns
+  // it on every response; echoing it back on later rounds keeps the same
+  // container (and its REPL state) for the rest of the turn.
+  let container: string | undefined;
 
   let iteration = 0;
   while (true) {
     iteration++;
     const response = await streamAssistantMessage(
       messages,
-      { ...apiOpts, tools: toolDefs },
+      {
+        ...apiOpts,
+        tools: toolDefs,
+        ...(container === undefined ? {} : { container }),
+      },
       hooks.onStream,
     );
+    container = response.container?.id ?? container;
 
     const toolUseBlocks = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
@@ -71,13 +162,22 @@ export async function runAgenticTurn(
       tool_use_blocks: toolUseBlocks.length,
     });
 
-    if (response.stop_reason !== "tool_use") return response;
+    // `pause_turn` means the API's own server-side loop (code execution)
+    // paused a long-running turn — not that it wants anything from us. The
+    // assistant turn is already in `messages` (streamAssistantMessage pushed
+    // it), so resuming is just re-sending the conversation as-is: no user
+    // message, no tool dispatch. Anything else terminal ends the turn.
+    const resumable =
+      response.stop_reason === "tool_use" ||
+      response.stop_reason === "pause_turn";
+    if (!resumable) return response;
     if (max_iterations !== undefined && iteration >= max_iterations) {
       // Cap reached. Return without dispatching tools (the next iteration
       // would make a second API call we're trying to avoid). The returned
-      // message still carries stop_reason="tool_use".
+      // message still carries stop_reason="tool_use"/"pause_turn".
       return response;
     }
+    if (response.stop_reason === "pause_turn") continue;
 
     // Phase 1: serial approval pass. Approval prompts (y/N readline) cannot
     // interleave concurrently, so they happen before any tool runs.
@@ -88,7 +188,7 @@ export async function runAgenticTurn(
     };
     const prepared: PreparedCall[] = [];
     for (const block of toolUseBlocks) {
-      hooks.onToolCall?.(block.name, block.input);
+      hooks.onToolCall?.(block.name, block.input, block.caller?.type);
       const tool = toolByName.get(block.name);
       let approved = true;
       if (tool && hooks.isMutating?.(block.name) && hooks.approveMutating) {

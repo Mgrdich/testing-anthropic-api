@@ -2,6 +2,7 @@ import { Debug } from "@/core/index.ts";
 import { BM25Retriever, tokenize } from "@/rag/bm25.ts";
 import { chunk } from "@/rag/chunkers/index.ts";
 import { Embedder } from "@/rag/embedder.ts";
+import type { RagCitation } from "@/rag/generate-answer.ts";
 import { answerWithClaude } from "@/rag/generate-answer.ts";
 import { retrieveHybrid } from "@/rag/hybrid.ts";
 import type {
@@ -35,6 +36,12 @@ export type RunRagInput = {
   k?: number;
   retrieval?: RetrievalMode;
   generate?: boolean;
+  /**
+   * Default true: send retrieved chunks as `search_result` content blocks
+   * with API citations enabled. False falls back to the legacy <chunk> XML
+   * prompt (no structural citations) for comparison.
+   */
+  citations?: boolean;
   answerModel?: string;
   onText?: (delta: string) => void;
   /**
@@ -53,6 +60,8 @@ export type RunRagOutput = {
   chunks: Chunk[];
   retrieved: Retrieved[];
   answer?: string;
+  /** Present when generation ran; empty on the legacy (--no-citations) path. */
+  citations?: RagCitation[];
   timings: {
     chunk: number;
     index: number;
@@ -166,17 +175,21 @@ export async function runRag(input: RunRagInput) {
   }
 
   let answer: string | undefined;
+  let citations: RagCitation[] | undefined;
   let tGenerate: number | undefined;
   if (shouldGenerate && retrieved.length > 0) {
     const tGenStart = performance.now();
-    answer = await answerWithClaude(retrieved, input.query, {
+    const result = await answerWithClaude(retrieved, input.query, {
       ...(input.answerModel ? { model: input.answerModel } : {}),
+      ...(input.citations !== undefined ? { citations: input.citations } : {}),
       ...(input.onText ? { onText: input.onText } : {}),
       onPrompt: ({ system, user }) => {
         dbg.block("system prompt", system);
         dbg.block("user message", user);
       },
     });
+    answer = result.text;
+    citations = result.citations;
     tGenerate = performance.now() - tGenStart;
   } else if (shouldGenerate) {
     dbg.log("skipping generation: 0 chunks retrieved");
@@ -188,6 +201,7 @@ export async function runRag(input: RunRagInput) {
     chunks,
     retrieved,
     ...(answer !== undefined ? { answer } : {}),
+    ...(citations !== undefined ? { citations } : {}),
     timings: {
       chunk: tChunk,
       index: tIndex,
