@@ -121,8 +121,11 @@ bun run rag query ./rag-handbook.md "How are postmortems run?" \
 bun run rag query ./rag-handbook.md "How do we handle postmortems?" --k 5
 ```
 
-The retrieved chunks print first, then Claude's streaming answer with
-inline `[N]` citations.
+The retrieved chunks print first, then Claude's streaming answer, then a
+`=== sources ===` section listing the cited chunks with the exact
+`cited_text` snippets the API attached to the answer. Pass
+`--no-citations` to compare against the legacy XML-prompt path (inline
+`[N]` indices requested via the system prompt, no sources section).
 
 ## End-to-end pipeline
 
@@ -176,7 +179,7 @@ inline `[N]` citations.
                   ┌──────────────────┐
                   │ streamAssistant  │
                   │ Message (Claude) │
-                  │ cites [N] inline │
+                  │ + API citations  │
                   └──────────────────┘
 ```
 
@@ -226,7 +229,7 @@ src/rag/
 ├── vector-store.ts     # VectorStore + VectorRetriever
 ├── bm25.ts             # BM25Index + BM25Retriever + tokenize()
 ├── hybrid.ts           # rrf() + retrieveHybrid() + HybridRanking type
-├── generate-answer.ts  # buildContext() + answerWithClaude()
+├── generate-answer.ts  # answerWithClaude() — search_result blocks + citations
 ├── chunkers/
 │   ├── index.ts        # chunk() dispatcher
 │   ├── size.ts
@@ -471,31 +474,41 @@ egalitarian; a smaller `k` privileges top hits.
 
 ## Generation step
 
-When `--no-generate` is not passed, the retrieved chunks are wrapped in XML
-tags (the prompt structure Anthropic recommends for separating context from
-the question) and sent to Claude via the existing `streamAssistantMessage`
-from `@/core/messages.ts`:
+When `--no-generate` is not passed, the retrieved chunks are sent to Claude
+via the existing `streamAssistantMessage` from `@/core/messages.ts` as a
+block-array user turn: one `search_result` content block per chunk, then a
+text block carrying the question. Each block sets
+`citations: {enabled: true}`, so the answer's text blocks come back with a
+structural `citations` array (`search_result_location` entries) — verifiable
+citations from the API instead of prompt-begged `[n]` indices:
 
 ```
-System: "You answer the <question> using ONLY the chunks inside <context>.
-        Each chunk is wrapped in a <chunk> tag with an index attribute; cite
-        indices inline like [1] or [3]. If the context is insufficient to
-        answer, say so explicitly — do not invent facts or use outside
-        knowledge."
+System: "You answer the <question> using ONLY the provided search results.
+        If the search results are insufficient to answer, say so explicitly
+        — do not invent facts or use outside knowledge."
 
-User:   "<context>
-         <chunk index="1" id="struct-database-migrations.online-schema-change-0" score="0.553">
-         <chunk 1 text>
-         </chunk>
-         <chunk index="2" id="struct-database-migrations.backfills-1" score="0.270">
-         <chunk 2 text>
-         </chunk>
-         </context>
-
-         <question>
-         How do I do an online schema change?
-         </question>"
+User:   [{type: "search_result",
+          source: "doc://struct-database-migrations.online-schema-change-0",
+          title: "Database Migrations > Online Schema Changes",
+          content: [{type: "text", text: "<chunk 1 text>"}],
+          citations: {enabled: true}},
+         ...,
+         {type: "text", text: "<question>\nHow do I do an online schema change?\n</question>"}]
 ```
+
+`source` is `doc://<chunk.id>`; `title` is the chunk's `headingPath` joined
+with `" > "`, falling back to the chunk id (size/semantic chunks carry no
+headings). The block push happens inside the rag module — core's
+`addUserMessage` stays string-only. `answerWithClaude` returns
+`{text, citations}`; the CLI renders the citations as a deduped
+`=== sources ===` section after the streamed answer (streaming itself is
+unchanged — citations ride only on the final message). Note: citations are
+incompatible with `output_config.format` (400), so this path must stay off
+structured outputs.
+
+Pass `--no-citations` to fall back to the legacy hand-rolled `<chunk>` XML
+context (system prompt asks for inline `[1]`-style indices by convention)
+for side-by-side comparison.
 
 The streamed response is written to stdout as it arrives. Default model is
 the project's `DEFAULT_MODEL` (`claude-sonnet-4-6`); override with
@@ -527,6 +540,7 @@ retrieves top-k, and (by default) streams an answer from Claude.
 | `--k`                   | `5`        | Top-k chunks to retrieve                |
 | `--retrieval`           | `hybrid`   | `vector` \| `bm25` \| `hybrid`           |
 | `--no-generate`         | off        | Skip the Claude answer step             |
+| `--no-citations`        | off        | Legacy `<chunk>` XML prompt, no API citations |
 | `--show-chunks`         | off        | Print full chunk text (not just preview)|
 | `--debug`               | off        | Emit `[debug]` traces to stderr — see below|
 | `--answer-model`        | `DEFAULT_MODEL` | Model id for the answer step       |
@@ -580,16 +594,24 @@ keeps going to stdout — so you can `2>debug.log` to separate them, or
   …
 [debug] /fused RRF top-5
 [debug] system prompt:
-You answer questions using ONLY the provided context. …
+You answer the <question> using ONLY the provided search results. …
 [debug] /system prompt
 [debug] user message:
-Context:
-
-[1] (id=struct-…-13, score=0.033)
-<chunk 1 text>
-…
+[
+  {
+    "type": "search_result",
+    "source": "doc://struct-…-13",
+    "title": "… > 5.2 Strontium-doped …",
+    "content": [{ "type": "text", "text": "<chunk 1 text>" }],
+    "citations": { "enabled": true }
+  },
+  …
+]
 [debug] /user message
 ```
+
+With `--no-citations`, the user-message trace is the legacy `<context>` /
+`<chunk index="…">` XML string instead of the JSON block array.
 
 What this is useful for:
 

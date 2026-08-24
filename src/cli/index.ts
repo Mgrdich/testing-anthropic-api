@@ -3,11 +3,26 @@ import { runRepl, sendTurn } from "@/cli/repl.ts";
 import { readStdin } from "@/cli/stdin.ts";
 import { Debug, errMsg, type MessageParam, type Tool } from "@/core/index.ts";
 import {
+  connectMcpServerHttp,
   connectMcpServers,
   loadMcpTools,
   type McpConnection,
   selectServers,
 } from "@/mcp/index.ts";
+
+/**
+ * Connection name for a `--mcp-url` server. The stdio path gets its name from
+ * the registry; a URL has none, so use `host/path` — short enough for the
+ * `[server]` labels on `#prompts`, unique enough to tell two endpoints apart.
+ */
+function httpServerName(url: string, index: number) {
+  try {
+    const { host, pathname } = new URL(url);
+    return `${host}${pathname === "/" ? "" : pathname}`;
+  } catch {
+    return `mcp-url-${index + 1}`; // unreachable: args.ts parsed it already
+  }
+}
 
 export async function runCli(argv: readonly string[]) {
   let args: Args;
@@ -26,13 +41,18 @@ export async function runCli(argv: readonly string[]) {
 
   if (args.debug) Debug.get().enable();
 
-  // --mcp was an explicit ask: if a server won't start, fail loudly rather
-  // than silently degrading to a tool-less session.
+  // --mcp / --mcp-url were an explicit ask: if a server won't start or won't
+  // answer, fail loudly rather than silently degrading to a tool-less
+  // session. Both transports land in one connection list — everything
+  // downstream (tools, # prompts, @ mentions) is transport-agnostic.
   let mcp: McpConnection[] | undefined;
   let mcpTools: Tool[] | undefined;
-  if (args.mcp) {
+  if (args.mcp || args.mcpUrls) {
     try {
-      mcp = await connectMcpServers(selectServers(args.mcp));
+      mcp = args.mcp ? await connectMcpServers(selectServers(args.mcp)) : [];
+      for (const [index, url] of (args.mcpUrls ?? []).entries()) {
+        mcp.push(await connectMcpServerHttp(httpServerName(url, index), url));
+      }
       const perServer = await Promise.all(
         mcp.map((conn) => loadMcpTools(conn.client)),
       );

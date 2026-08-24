@@ -10,9 +10,23 @@ import from the barrel, not deep paths.
 ## Layout
 
 - `messages.ts` — the conversation primitives (see below).
+- `advisor.ts` — `streamAdvisorMessage(messages, opts?, onStream?)`: a
+  streaming turn with the **server-side advisor tool** enabled (see
+  below). Lives outside `tools/` on purpose: the API runs the advisor
+  sub-inference itself, so there is no client-side tool loop.
+- `batches.ts` — `runMessageBatch(requests, {pollMs?})`: Message Batches
+  API wrapper. Creates the batch, polls `retrieve` until
+  `processing_status === "ended"` (polling is Debug-traced; default
+  interval 5s), then streams `.results()` into a `Map` keyed by
+  `custom_id` — results arrive in arbitrary order, so callers must
+  reassemble by key, never by position. Batched requests cost 50% of
+  standard prices. `BatchRequest` / `BatchResult` (both SDK-derived) are
+  exported alongside. Consumed by `eval run --batch`.
 - `client.ts` — `AnthropicClient`, the lazy SDK-client singleton.
-- `constants.ts` — `DEFAULT_MODEL` (`claude-sonnet-4-6`) and
-  `DEFAULT_MAX_TOKENS` (1024). The single place model defaults live.
+- `constants.ts` — `DEFAULT_MODEL` (`claude-sonnet-4-6`),
+  `DEFAULT_MAX_TOKENS` (1024), `SAMPLING_MODEL` (Haiku, for MCP
+  sampling) and `ADVISOR_MODEL` (`claude-opus-4-8`, the advisor tool's
+  default). The single place model defaults live.
 - `debug.ts` — `Debug`, the process-global trace provider.
 - `util.ts` — `errMsg(e)`: `Error.message` or `String(e)`. Use it in
   every `catch` that formats an error for output.
@@ -66,6 +80,38 @@ extractText(content)                                 // join text blocks
   default model) rejects assistant prefill with a 400 — exercise that
   path with a prefill-capable model (e.g.
   `claude-haiku-4-5-20251001`).
+
+## Advisor tool (`advisor.ts`)
+
+```ts
+streamAdvisorMessage(messages, opts?, onStream?): Promise<BetaMessage>
+type StreamAdvisorOptions = StreamAssistantOptions & { advisor_model?: string }
+type AdvisorStream = BetaMessageStream<unknown>
+const ADVISOR_BETA = "advisor-tool-2026-03-01"
+```
+
+One `client.beta.messages.stream()` call with
+`betas: [ADVISOR_BETA]` and
+`tools: [{ type: "advisor_20260301", name: "advisor", model }]` — the
+executor model (`opts.model`, i.e. `DEFAULT_MODEL`) consults a stronger
+advisor (`opts.advisor_model`, default `ADVISOR_MODEL`) **server-side**,
+so nothing here dispatches tools. Everything else (`system`,
+`temperature`, `stop_sequences`, `thinking`, `cache_control`) flows
+through `StreamAssistantOptions` unchanged, and the raw stream goes to
+`onStream` like `streamAssistantMessage`.
+
+Two contracts the caller must not break:
+
+- **Push the whole content array.** The function does this itself —
+  `server_tool_use` and `advisor_tool_result` blocks (including the
+  opaque `advisor_redacted_result` blob) must round-trip verbatim in
+  history.
+- **Keep the tool declared.** Once an advisor block is in history, every
+  later request must still declare the advisor tool or the API 400s.
+  Holds naturally for the CLI's per-session `--advisor` flag.
+
+The beta ↔ non-beta boundary is crossed with the same one-cast-at-the-
+call-site pattern as `tools/agentic_sdk.ts`.
 
 ## Client singleton (`client.ts`)
 

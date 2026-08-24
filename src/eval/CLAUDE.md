@@ -69,7 +69,7 @@ src/eval/
 ├── prompts.ts      # loadPromptVersion / loadAuxPrompt
 ├── scaffold.ts     # createPromptScaffold — template files
 ├── dataset.ts      # generateDataset — HAIKU hardcoded
-├── runner.ts       # runPromptOnDataset
+├── runner.ts       # runPromptOnDataset — sequential or --batch (core runMessageBatch)
 ├── codeGrader.ts   # gradeWithCode — dynamic-imports code-eval.ts
 ├── modelGrader.ts  # gradeWithModel — LLM-as-judge
 └── combineGrader.ts # combineGrader — join code+model, optional markdown
@@ -196,20 +196,34 @@ immediately. Note the SDK forces `additionalProperties: false`, so
 generation emits only `input`/`reference`; extra per-item fields must be
 added to the dataset by hand (the on-disk schema still accepts them).
 
-### `run <name> <version> [--model <id>] [--force]`
+### `run <name> <version> [--model <id>] [--batch] [--force]`
 
 Loads `evals/prompts/<name>/<version>.txt` as the system prompt and
-runs it against every dataset item sequentially. Writes
+runs it against every dataset item — sequentially by default, or as a
+single Message Batch with `--batch`. Writes
 `evals/results/<name>/<version>.runs.jsonl` preserving any custom
 fields from the dataset rows.
 
 | Flag      | Type   | Default                        | Effect                                                                                  |
 |-----------|--------|--------------------------------|-----------------------------------------------------------------------------------------|
 | `--model` | string | `DEFAULT_MODEL` (Sonnet 4.6)   | Anthropic model id used to run the prompt.                                              |
+| `--batch` | bool   | off                            | Submit all items as one Message Batch (core `runMessageBatch`) instead of sequential calls. 50% cost; async — polls until the batch ends. |
 | `--force` | bool   | off                            | Re-run even if `<version>.runs.jsonl` already exists. Without it the file is the cache. |
 
 Cache-hit path mirrors `code` / `grade`: existing rows are read and
 validated against `RunRowSchema`; no API calls.
+
+Batch semantics: one request per dataset item (`custom_id: item-<i>`)
+with params mirroring the sequential path (model, max_tokens, system,
+single user message). Results come back keyed by `custom_id` in
+arbitrary order, so rows are reassembled **in dataset order** —
+`code`/`grade`/`combined` join by row index and would silently mispair
+otherwise. Errored/expired/canceled items become `{...item, output: ""}`
+with a stderr warning so `RunRowSchema` still validates and one bad item
+never sinks the run. Same output file either way, so the caching
+contract and all downstream subcommands are untouched. Scope is `run`
+only: `gen`/`grade` use `beta.messages.parse` (structured outputs),
+which has no batch equivalent — a documented follow-up.
 
 ### `code <name> <version> [--force]`
 
@@ -293,7 +307,7 @@ prints avg combined, avg code, avg model, histogram, and error count.
 |--------------------------------------------------|-----------------------------------|
 | `bun run eval scaffold <name> [--check ...]`                | Create the prompt directory       |
 | `bun run eval gen <name> [--count N] [--force]`             | Generate dataset (Haiku)          |
-| `bun run eval run <name> <vN> [--model id] [--force]`       | Run prompt against dataset        |
+| `bun run eval run <name> <vN> [--model id] [--batch] [--force]` | Run prompt against dataset (`--batch`: one Message Batch) |
 | `bun run eval code <name> <vN> [--force]`                   | Run code grader (if configured)   |
 | `bun run eval grade <name> <vN> [--model id] [--force]`     | Run model grader (LLM-as-judge)   |
 | `bun run eval combined <name> <vN> [--weights c,m] [--markdown] [--auto] [--force]` | Join code+model; mtime-cached; --auto bootstraps missing upstreams |

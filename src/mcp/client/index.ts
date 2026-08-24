@@ -8,6 +8,7 @@ export type { McpConnection } from "@/mcp/client/connection.ts";
 export {
   connectDocsServer,
   connectMcpServer,
+  connectMcpServerHttp,
   connectMcpServers,
   McpConnectError,
 } from "@/mcp/client/connection.ts";

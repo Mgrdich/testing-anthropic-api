@@ -1,6 +1,7 @@
 import type { DieFn, Flags } from "@/core/index.ts";
 import { Debug, makeCli, parseArgs, runMain } from "@/core/index.ts";
 import { generateSyntheticDoc } from "@/rag/doc/generate.ts";
+import type { RagCitation } from "@/rag/generate-answer.ts";
 import { runRag } from "@/rag/rag.ts";
 import type { ChunkerConfig, Retrieved } from "@/rag/types.ts";
 
@@ -21,6 +22,8 @@ Subcommands:
       --k N                               default: 5
       --retrieval vector|bm25|hybrid      default: hybrid
       --no-generate                       skip the Claude answer step
+      --no-citations                      legacy <chunk> XML prompt instead of
+                                            search_result blocks + citations
       --show-chunks                       print the full text of each chunk
       --answer-model ID                   model id for the answer step
       --debug                             emit [debug] traces to stderr:
@@ -113,6 +116,35 @@ function printRetrieved(
   }
 }
 
+function printSources(citations: ReadonlyArray<RagCitation>) {
+  // Dedupe by search_result index (= retrieval order): one entry per cited
+  // chunk, with each distinct cited_text snippet listed under it.
+  const bySource = new Map<
+    number,
+    { source: string; title: string; snippets: string[] }
+  >();
+  for (const c of citations) {
+    let entry = bySource.get(c.searchResultIndex);
+    if (!entry) {
+      entry = { source: c.source, title: c.title ?? c.source, snippets: [] };
+      bySource.set(c.searchResultIndex, entry);
+    }
+    const snippet = c.citedText.replace(/\s+/g, " ").trim();
+    if (!entry.snippets.includes(snippet)) entry.snippets.push(snippet);
+  }
+  for (const [index, entry] of [...bySource.entries()].sort(
+    (a, b) => a[0] - b[0],
+  )) {
+    process.stdout.write(`\n[${index + 1}] ${entry.title} — ${entry.source}\n`);
+    for (const snippet of entry.snippets) {
+      const preview = snippet.slice(0, 200);
+      process.stdout.write(
+        `  "${preview}${snippet.length > 200 ? "..." : ""}"\n`,
+      );
+    }
+  }
+}
+
 async function cmdGenerateDoc(flags: Flags["flags"]) {
   const outPath = getString(flags, "out") ?? "./rag-handbook.md";
   const sections = getInt(flags, "sections", 12, { min: 1 });
@@ -145,6 +177,7 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]) {
   const k = getInt(flags, "k", 5, { min: 1 });
   const retrieval = getEnum(flags, "retrieval", RETRIEVALS, "hybrid");
   const generate = flags["no-generate"] !== true;
+  const citations = flags["no-citations"] !== true;
   const showChunks = flags["show-chunks"] === true;
   const answerModel = getString(flags, "answer-model");
 
@@ -157,6 +190,7 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]) {
     k,
     retrieval,
     generate,
+    citations,
     ...(answerModel ? { answerModel } : {}),
     onText: (delta) => process.stdout.write(delta),
     onRetrieved: (retrieved, timings, chunks) => {
@@ -175,6 +209,10 @@ async function cmdQuery(positional: string[], flags: Flags["flags"]) {
     },
   });
 
+  if (result.citations !== undefined && result.citations.length > 0) {
+    process.stdout.write(`\n\n=== sources ===`);
+    printSources(result.citations);
+  }
   if (result.timings.generate !== undefined) {
     process.stdout.write(
       `\ngenerate=${result.timings.generate.toFixed(0)}ms\n`,
@@ -220,6 +258,10 @@ async function cmdCompare(positional: string[], flags: Flags["flags"]) {
         }
       },
     });
+    if (result.citations !== undefined && result.citations.length > 0) {
+      process.stdout.write(`\n\n=== sources ===`);
+      printSources(result.citations);
+    }
     if (result.timings.generate !== undefined) {
       process.stdout.write(
         `\ngenerate=${result.timings.generate.toFixed(0)}ms\n`,
