@@ -2,6 +2,11 @@
 
 A minimal TypeScript CLI for poking at the Anthropic API. Built on Bun (TS runs natively, no build step in dev) with the official `@anthropic-ai/sdk`.
 
+Beyond the chat CLI it carries four sub-CLIs, each exercising a different
+slice of the API surface: `bun run eval` (prompt evaluation), `bun run rag`
+(chunking + hybrid retrieval + cited answers), `bun run mcp` (Model Context
+Protocol client/servers), and `bun run skills` (Agent Skills + Files API).
+
 ## Setup
 
 ```bash
@@ -56,8 +61,29 @@ bun run dev --model claude-haiku-4-5-20251001 \
 # --stop alone works on any model; repeat the flag for multiple stops (max 4)
 bun run dev --stop 'STOP' --stop 'END' "write a sentence then say STOP"
 
+# adaptive thinking — reasoning renders to stderr, stdout stays answer-only
+bun run dev --thinking --max-tokens 4096 "how many r's in strawberry?"
+
+# prompt caching — prints [cache] read=… wrote=… uncached=… after each turn
+bun run dev --cache --system "$(cat system-prompts/math-tutor.txt)" "hi"
+
+# advisor tool: sonnet-4-6 executor consults an opus-4-8 advisor mid-turn
+bun run dev --advisor "design a rate limiter for a multi-tenant API"
+
+# memory tool — the model persists notes under ./memories across runs
+bun run dev --memory "remember that I prefer TypeScript over Python"
+
+# connect MCP servers over stdio (bare flag connects docs + research)
+bun run dev --mcp "research the Eiffel Tower"
+
+# ...or over StreamableHTTP (start the server first, see MCP section below)
+bun run dev --mcp-url http://localhost:3100/mcp "list the docs"
+
 # enable tool-use (all built-in demo tools)
 bun run dev --tools "what time is it, and what is (12*7)+3?"
+
+# programmatic tool calling — Claude scripts your tools inside the container
+bun run dev --tools --ptc "what's the weather in Tokyo, Paris, and Lima?"
 
 # enable a subset of tools
 bun run dev --once --tools calculator "compute (2+3)*4"
@@ -95,12 +121,23 @@ bun run start "hi" # runs the bundled output
 | `--once`         | off                 | Exit after the first reply (skip REPL even in TTY).  |
 | `--debug`        | off                 | Log request config + response metadata to stderr.    |
 | `--stream`       | off                 | Stream the response, printing tokens as they arrive. |
+| `--thinking`     | off                 | Adaptive thinking (`thinking: {type:"adaptive"}`). Reasoning renders to **stderr** with a dim `[thinking]` prefix so stdout stays answer-only. Incompatible with `--prefill`; shares the `--max-tokens` cap with the answer, so raise it (a warning fires at the 1024 default). |
+| `--cache`        | off                 | Top-level `cache_control: {type:"ephemeral"}` auto-caching, plus a per-turn `[cache] read=… wrote=… uncached=…` line on stderr. The minimum cacheable prefix on sonnet-4-6 is ~1024 tokens, so short prompts silently won't cache. |
+| `--advisor [id]` | off / `claude-opus-4-8` | Server-side advisor tool (beta `advisor-tool-2026-03-01`): the executor consults a stronger model mid-turn. Advice renders to stderr as `[advisor] …`. Ignores `--prefill`; cannot combine with `--tools`, `--mcp`/`--mcp-url`, or `--memory`. |
+| `--memory [dir]` | off / `./memories`  | Anthropic-defined memory tool (`memory_20250818`) over a local directory, so the model persists notes across turns and runs. Forces the tool-use loop on even without `--tools`. Cannot combine with `--advisor`. |
 | `--prefill <txt>`| (none)              | Assistant prefill — model continues from this text.  |
 | `--stop <seq>`   | (none)              | Stop sequence; repeat for multiple (max 4 per API).  |
 | `--tools [names]`| off                 | Enable tool-use. Bare flag enables all built-ins; pass a comma-separated subset, e.g. `--tools calculator,get_time`. |
+| `--ptc`          | off                 | Programmatic tool calling: adds the server-side `code_execution` tool and marks every `--tools` entry `allowed_callers`, so Claude scripts them in the container and only the script's output re-enters the context. Requires `--tools`; local runner only — cannot combine with `--mcp`/`--mcp-url`, `--runner sdk`, or `--advisor`. |
 | `--max-iterations N` | unbounded       | Cap the tool-use loop at N assistant turns. When the cap fires, the REPL prints a warning and the model's last (unfinished) tool-call message is the final response. |
 | `--runner <name>`| `local`             | Pick the tool-use loop: `local` is our hand-rolled `runAgenticTurn`; `sdk` is Anthropic's `client.beta.messages.toolRunner()` (beta API). |
+| `--mcp [servers]`| off                 | Spawn MCP servers over stdio and expose their tools. Bare flag connects all registered servers (`docs`, `research`); pass a subset, e.g. `--mcp docs`. Combines with `--tools`. |
+| `--mcp-url <url>`| (none)              | Connect to an already-running MCP server over StreamableHTTP (repeatable). Merges into the same session as `--mcp`. |
 | `--help`         | —                   | Print usage and exit.                                |
+
+Refusals are handled with no flag: if a turn comes back with
+`stop_reason: "refusal"`, the null-guarded `stop_details` is printed to
+stderr instead of an unexplained empty line.
 
 ## Tools
 
@@ -177,6 +214,80 @@ is the unambiguous signal that the model batched the calls; the four
 two-phase dispatch (serial approval pass, then parallel `Promise.all`
 execution) in `core/tools/agentic.ts:82-118`.
 
+## MCP (Model Context Protocol)
+
+Two stdio servers ship with the repo — `docs` (serves the gitignored
+`docs/` folder as tools + a prompt + a `docs://` resource template) and
+`research` (one `research(topic)` tool that fetches Wikipedia and then uses
+**MCP sampling** to ask the *client* to summarize). Neither holds an API
+key; sampling is how a server reaches the model.
+
+```bash
+# standalone demo: prompts, resources, and toolRunner against the live API
+bun run mcp --debug
+
+# use MCP tools from the chat CLI (bare flag connects docs + research)
+bun run dev --mcp "research the Eiffel Tower"
+
+# in the REPL: #prompts lists MCP prompts, #<name> key=value invokes one,
+# and @<resource> attaches a docs/ file to the turn
+bun run dev --mcp
+> #explain_topic topic="tunnel collapse" audience="engineer"
+> @northvale-tunnel-collapse.md summarize this
+
+# same docs server over StreamableHTTP instead of stdio
+bun run mcp:http-server                 # [--port 3100] [--stateless] [--json-response]
+bun run dev --mcp-url http://localhost:3100/mcp "list the docs"
+
+# run either server standalone (e.g. to point inspector tooling at it)
+bun run mcp:server
+bun run mcp:research-server
+```
+
+`--stateless` drops session ids and with them the server→client stream, so
+sampling and roots stop working and the server falls back to its hardcoded
+docs dir — which is the point of the flag: it demonstrates *why*
+statelessness costs you those features. See `src/mcp/CLAUDE.md`.
+
+## RAG
+
+`bun run rag` chunks a document, builds retrieval indices, retrieves top-k
+chunks, and generates a cited answer.
+
+```bash
+# generate a synthetic handbook to play with (one API call per H1 section)
+bun run rag generate-doc --out ./rag-handbook.md --sections 12
+
+# retrieve + answer (structure chunking, hybrid retrieval, k=5 by default)
+bun run rag query ./rag-handbook.md "how do we handle on-call escalation?"
+
+# retrieval only, with the full chunk inventory and per-retriever rankings
+bun run rag query ./rag-handbook.md "escalation" --no-generate --debug
+```
+
+Answers use `search_result` content blocks with `citations: {enabled: true}`,
+so the citations come back **structurally** (each with `cited_text`, source,
+and title) rather than being begged for in the prompt — the CLI prints them
+in a `=== sources ===` section. `--no-citations` falls back to the legacy
+`<chunk>` XML prompt for side-by-side comparison. Chunkers (`size`,
+`structure`, `semantic`) and retrievers (`vector`, `bm25`, `hybrid`) are
+selectable per query; see `src/rag/README.md`.
+
+## Agent Skills
+
+`bun run skills` runs an Anthropic-managed document skill inside a
+server-side code-execution container and downloads whatever it produces —
+the repo's only Files API consumer.
+
+```bash
+bun run skills generate --skill pptx --out ./skills-out \
+  "a 3-slide deck explaining hybrid retrieval"
+```
+
+`--skill` takes `pptx`, `xlsx`, `docx`, or `pdf`. The model's narration
+streams to stdout, each downloaded artifact prints as `saved <path>`, and
+`--debug` emits traces to stderr. See `src/skills/CLAUDE.md`.
+
 ## Prompt evaluation workflow
 
 `bun run eval` exposes a minimal end-to-end loop for iterating on a
@@ -230,7 +341,7 @@ bun run eval combined teacher-hinter v2 --auto --markdown
 |----------------------------------------|---------------------------------------------------------------|------------------------------------|
 | `eval scaffold <name>`                 | `--check <json\|zod\|regex\|none>` (default `none`)           | Create the prompt directory with template files. |
 | `eval gen <name>`                      | `--count <N>` (default `10`), `--force`                       | Generate `evals/datasets/<name>.jsonl` using Haiku. `--force` overwrites. |
-| `eval run <name> <version>`            | `--model <id>` (default `claude-sonnet-4-6`), `--force`       | Run the prompt against the dataset; write `<version>.runs.jsonl`. Cached unless `--force`. |
+| `eval run <name> <version>`            | `--model <id>` (default `claude-sonnet-4-6`), `--batch`, `--force` | Run the prompt against the dataset; write `<version>.runs.jsonl`. Cached unless `--force`. `--batch` submits every item as one Message Batch (50% cost, async — polls until the batch ends) instead of sequential calls; rows are reassembled into dataset order by `custom_id`. |
 | `eval code <name> <version>`           | `--force`                                                     | Apply `code-eval.ts` to the runs; write `<version>.code.jsonl`. No-op if no `code-eval.ts`. Cached unless `--force`. |
 | `eval grade <name> <version>`          | `--model <id>` (default `claude-sonnet-4-6`), `--force`       | LLM-as-judge over the runs; write `<version>.graded.jsonl`. Cached unless `--force`. |
 | `eval combined <name> <version>`       | `--weights <c,m>` (default `0.5,0.5`), `--markdown`, `--auto`, `--force` | Join `<version>.code.jsonl` and/or `<version>.graded.jsonl` into a single 1-5 score; write `<version>.combined.jsonl` (+ `.md` with `--markdown`). `--auto` bootstraps missing upstream artifacts (`run`, `code`, `grade`) before combining. Cached when combined is newer than all its inputs; `--force` recomputes. Without `--auto`, no API calls. |
@@ -256,41 +367,58 @@ the `CheckResult` schema, and helpers (`zodCheck`, `stripCodeFence`,
 src/
 ├── index.ts          # thin entry → calls runCli()
 ├── cli/              # chat-CLI concerns
-│   ├── index.ts      # runCli(): args, env, initial turn, REPL
+│   ├── index.ts      # runCli(): args, env, MCP connections, initial turn, REPL
 │   ├── args.ts       # parseArgs, printHelp
 │   ├── repl.ts       # runRepl(), sendTurn() — the conversation loop
+│   ├── hooks.ts      # agentic hooks: tool traces, y/N approval, [thinking] rendering
+│   ├── mcp-turn.ts   # #prompt invocation and @resource mentions
 │   └── stdin.ts      # readStdin() for piped input
 ├── core/             # Anthropic client + message orchestration
 │   ├── index.ts      # public barrel
 │   ├── client.ts     # AnthropicClient singleton (init/get/reset)
-│   ├── messages.ts   # addUserMessage, addAssistantMessage, streamAssistantMessage, MessageParam
-│   ├── constants.ts  # DEFAULT_MODEL, DEFAULT_MAX_TOKENS
+│   ├── messages.ts   # addUserMessage, addAssistantMessage, streamAssistantMessage, parseAssistantMessage
+│   ├── advisor.ts    # streamAdvisorMessage — server-side advisor tool
+│   ├── batches.ts    # runMessageBatch — Message Batches API
+│   ├── constants.ts  # DEFAULT_MODEL, DEFAULT_MAX_TOKENS, SAMPLING_MODEL, ADVISOR_MODEL
+│   ├── debug.ts      # Debug singleton (dbg.log/section/block/json)
+│   ├── cli.ts        # makeCli/runMain helpers shared by the sub-CLIs
 │   ├── util.ts       # errMsg helper
-│   └── tools/            # tool-use: Tool type, per-tool files, runAgenticTurn loop
-│       ├── CLAUDE.md
-│       ├── index.ts
-│       ├── types.ts      # Tool interface
-│       ├── define.ts     # defineTool() — thin wrapper over SDK's betaZodTool
-│       ├── echo.ts       # one file per built-in tool
-│       ├── get_time.ts
-│       ├── calculator.ts
-│       ├── get_weather.ts
+│   └── tools/            # tool-use: Tool union, per-tool files, runAgenticTurn loop
+│       ├── types.ts      # Tool = CustomTool | AnthropicDefinedTool
+│       ├── define.ts     # defineTool() — betaZodTool wrapper, sets strict: true
+│       ├── memory.ts     # memory_20250818 over a local dir
+│       ├── echo.ts / get_time.ts / calculator.ts / get_weather.ts
 │       ├── builtins.ts   # BUILTIN_TOOLS registry + selectTools() + MUTATING_TOOLS
-│       ├── agentic.ts    # runAgenticTurn (local hand-rolled loop)
+│       ├── agentic.ts    # runAgenticTurn (local loop; PTC container + pause_turn)
 │       └── agentic_sdk.ts # runAgenticTurnSdk (client.beta.messages.toolRunner)
+├── mcp/              # Model Context Protocol (`bun run mcp`)
+│   ├── servers/      # docs-server, http-docs-server, research-server + registry
+│   ├── client/       # connection (stdio + StreamableHTTP), sampling, roots, tools/prompts/resources
+│   └── cli.ts        # standalone demo of the SDK's MCP helpers
+├── rag/              # chunking + retrieval + cited answers (`bun run rag`)
+│   ├── chunkers/     # size, structure, semantic
+│   ├── bm25.ts / vector-store.ts / hybrid.ts / embedder.ts
+│   ├── generate-answer.ts  # search_result blocks + structural citations
+│   └── cli.ts
+├── skills/           # Agent Skills + Files API (`bun run skills`)
+│   ├── generate.ts   # container.skills + code execution + artifact download
+│   └── cli.ts
 └── eval/             # prompt evaluation module (`bun run eval`)
-    ├── CLAUDE.md     # workflow docs + code-eval contract
     ├── index.ts      # public barrel — helper kit + types
     ├── cli.ts        # subcommand dispatcher
     ├── types.ts      # Zod schemas + inferred TS types
     └── …             # paths, jsonl, scaffold, dataset, runner, graders, checks
 ```
 
-`cli/` is everything that's specific to being a terminal program. `core/`
-is the LLM-facing piece (singleton client + message helpers + the
-tool-use loop in `core/tools/`) and is where future MCP integration will
-plug in too — so it can be reused by non-CLI callers. `eval/` is the
-prompt-evaluation module on top of `core/`.
+Each module carries its own doc: `src/cli/CLAUDE.md`, `src/core/CLAUDE.md`,
+`src/core/tools/CLAUDE.md`, `src/mcp/CLAUDE.md`, `src/eval/CLAUDE.md`,
+`src/skills/CLAUDE.md`, and `src/rag/README.md`.
+
+`cli/` is everything specific to being a terminal program. `core/` is the
+LLM-facing piece — singleton client, message primitives, the tool-use loop
+in `core/tools/`, and the advisor/batches surfaces — reusable by non-CLI
+callers. `mcp/`, `rag/`, `skills/`, and `eval/` are sub-CLIs built on top of
+`core/`, each with its own `bun run` entry point.
 
 ## Notes
 
