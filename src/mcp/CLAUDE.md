@@ -93,9 +93,19 @@ what costs you server→client features, not any change to the server's code.
   (404 on an unknown id). Stateless mode builds a throwaway server+transport
   **per request** — the SDK's transport refuses reuse, to avoid message-id
   collisions between clients — closed via `closeWhenDone()` once the response
-  body has drained. `Bun.serve` runs with `idleTimeout: 0` because SSE streams
+  body has drained *or the client hangs up* (it mirrors the body through a
+  `ReadableStream` rather than a `TransformStream` precisely to catch the
+  second case). `Bun.serve` runs with `idleTimeout: 0` because SSE streams
   sit idle between server→client messages. Key-free and `@/core`-free like the
   stdio entries; diagnostics on stderr.
+  **Two things keep the endpoint local**, since it is unauthenticated and
+  serves files: it binds `127.0.0.1` (`Bun.serve` would otherwise listen on
+  every interface), and a request carrying an `Origin` header is refused
+  unless that origin is loopback — a browser page can rebind DNS to
+  127.0.0.1, so binding alone isn't enough. A missing `Origin` (curl, the MCP
+  SDK) passes. Stateful sessions also carry a `lastSeen` stamp and are swept
+  after 10 minutes idle, closing transport *and* server: a client that
+  disappears without a DELETE would otherwise pin both forever.
 - `research-server.ts` — standalone stdio server (`bun run mcp:research-server`).
   One tool, `research(topic)`: fetches the full plain-text Wikipedia extract
   (action API, capped at 10k chars) and then **uses MCP sampling** to ask the

@@ -146,11 +146,16 @@ export function createMemoryHandlers(
           `old_str is not unique in ${command.path} (${occurrences} matches)`,
         );
       }
-      await fs.writeFile(
-        target,
-        text.replace(command.old_str, command.new_str),
-        "utf8",
-      );
+      // Splice by index rather than `text.replace(old, new)`: even with a
+      // string pattern, `replace` expands `$&`, `` $` ``, `$'` and `$$` in the
+      // *replacement*, so a note containing any of them would be silently
+      // corrupted on write.
+      const at = text.indexOf(command.old_str);
+      const edited =
+        text.slice(0, at) +
+        command.new_str +
+        text.slice(at + command.old_str.length);
+      await fs.writeFile(target, edited, "utf8");
       return `edited ${command.path}`;
     },
 

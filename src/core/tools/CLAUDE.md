@@ -68,6 +68,7 @@ const PTC_CODE_EXECUTION_TOOL: Anthropic.ToolUnion;   // {type, name}
 
 type RunAgenticOptions = StreamAssistantOptions & {
   max_iterations?: number;                    // unset = unbounded
+  max_pause_resumes?: number;                 // consecutive pause_turn cap (default 5)
   server_tools?: readonly Anthropic.ToolUnion[];  // appended verbatim
   allowed_callers?: readonly ToolCaller[];    // stamped on client tool defs
   omit_strict?: boolean;                      // drop strict (PTC)
@@ -140,6 +141,12 @@ mechanics worth knowing before you touch it:
   for `z.object(...)`, so `defineTool` only *normalizes* — it fills the
   field in when a schema shape doesn't. Keep that guard: a strict tool
   whose schema is open 400s.
+- The **`required` half can't be normalized** the same way — a schema
+  with optional fields legitimately omits them, and there's no correct
+  way to invent them. So `defineTool` checks (`isStrictable`) and simply
+  **ships such a tool non-strict** rather than emitting a request the
+  API rejects. All four built-ins qualify; a future tool with an
+  optional field silently won't, which is the intended outcome.
 
 All four built-ins have all-required, closed schemas, so they qualify
 as-is. **MCP-sourced tools stay non-strict** (`mcp/client/tools.ts` never
@@ -178,6 +185,12 @@ The loop needs three things beyond the ordinary path, all in
    a pathological pause loop still hits the cap; when it does, the
    returned message carries `stop_reason === "pause_turn"` (the caller's
    cap detection must accept both it and `"tool_use"`).
+   `max_iterations` is unbounded by default, though, and a resume makes
+   no *local* progress the way a tool round does — so a second,
+   always-on ceiling applies: **`max_pause_resumes` (default 5) caps
+   *consecutive* pause resumes** and is reset by any other round. Without
+   it a server-side loop stuck on `pause_turn` would bill an unbounded
+   stream of API calls with nothing to show for them.
 
 Everything else already fit: PTC requires replies to pending
 programmatic calls to be **tool_result-only user messages**, which is

@@ -34,6 +34,19 @@ const DEFAULT_PORT = 3100;
 const MCP_PATH = "/mcp";
 /** Header the spec uses to carry the session id in both directions. */
 const SESSION_HEADER = "mcp-session-id";
+/**
+ * Loopback only. `Bun.serve` defaults to every interface, which would put an
+ * unauthenticated file-reading JSON-RPC endpoint on the LAN; this server is a
+ * local demo and has no auth of its own.
+ */
+const BIND_HOST = "127.0.0.1";
+/**
+ * Idle sessions are swept after this long. A client that goes away without
+ * DELETEing its session would otherwise pin its transport *and* its
+ * `McpServer` for the lifetime of the process.
+ */
+const SESSION_IDLE_MS = 10 * 60_000;
+const SESSION_SWEEP_MS = 60_000;
 
 type HttpServerArgs = {
   port: number;
@@ -127,7 +140,25 @@ function closeWhenDone(res: Response, cleanup: () => void) {
     done = true;
     cleanup();
   };
-  const body = res.body.pipeThrough(new TransformStream({ flush: once }));
+  // Mirror the body rather than `pipeThrough(new TransformStream(...))`: a
+  // Transformer only gives us `flush` (the drained case), and the client
+  // hanging up mid-stream has to clean up too or the pair leaks.
+  const reader = res.body.getReader();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done: finished, value } = await reader.read();
+      if (finished) {
+        controller.close();
+        once();
+        return;
+      }
+      controller.enqueue(value);
+    },
+    cancel(reason) {
+      void reader.cancel(reason);
+      once();
+    },
+  });
   return new Response(body, {
     status: res.status,
     statusText: res.statusText,
@@ -152,17 +183,41 @@ try {
  * the client keeps the session — that persistence is exactly what stateless
  * mode gives up.
  */
-const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
+type Session = {
+  transport: WebStandardStreamableHTTPServerTransport;
+  server: ReturnType<typeof buildDocsServer>;
+  /** Last time a request rode this session; drives the idle sweep below. */
+  lastSeen: number;
+};
+
+const sessions = new Map<string, Session>();
+
+/**
+ * Drop sessions no request has touched for `SESSION_IDLE_MS`, closing both
+ * halves. Without this a client that disconnects without a DELETE pins its
+ * transport and server forever.
+ */
+function sweepIdleSessions() {
+  const cutoff = Date.now() - SESSION_IDLE_MS;
+  for (const [id, session] of sessions) {
+    if (session.lastSeen > cutoff) continue;
+    sessions.delete(id);
+    void session.transport.close().catch(() => {});
+    void session.server.close().catch(() => {});
+    note(`session ${id} swept after idling (${sessions.size} live)`);
+  }
+}
 
 /** Stateful: initialize mints a session; every later request rides its id. */
 async function handleStateful(req: Request): Promise<Response> {
   const sessionId = req.headers.get(SESSION_HEADER);
   if (sessionId) {
-    const transport = sessions.get(sessionId);
-    if (!transport) {
+    const session = sessions.get(sessionId);
+    if (!session) {
       return jsonRpcError(404, -32001, `unknown session id: ${sessionId}`);
     }
-    return await transport.handleRequest(req);
+    session.lastSeen = Date.now();
+    return await session.transport.handleRequest(req);
   }
 
   // No session id: only an `initialize` POST may open one.
@@ -178,25 +233,28 @@ async function handleStateful(req: Request): Promise<Response> {
     );
   }
 
+  const server = buildDocsServer();
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: () => crypto.randomUUID(),
     enableJsonResponse: args.jsonResponse,
     onsessioninitialized: (id) => {
-      sessions.set(id, transport);
+      sessions.set(id, { transport, server, lastSeen: Date.now() });
       note(`session ${id} initialized (${sessions.size} live)`);
     },
     onsessionclosed: (id) => {
       sessions.delete(id);
+      void server.close().catch(() => {});
       note(`session ${id} closed by client (${sessions.size} live)`);
     },
   });
   transport.onclose = () => {
     const id = transport.sessionId;
     if (id && sessions.delete(id)) {
+      void server.close().catch(() => {});
       note(`session ${id} transport closed (${sessions.size} live)`);
     }
   };
-  await buildDocsServer().connect(transport);
+  await server.connect(transport);
   // The body is already parsed; hand it over so the transport doesn't re-read
   // the (now consumed) request stream.
   return await transport.handleRequest(req, { parsedBody: body });
@@ -217,8 +275,30 @@ async function handleStateless(req: Request): Promise<Response> {
   });
 }
 
+/**
+ * Reject cross-origin browser requests. A page the user visits can resolve a
+ * hostname to 127.0.0.1 (DNS rebinding) and reach a loopback-bound server, so
+ * binding is not on its own enough: an `Origin` means a browser sent this, and
+ * the only browser origins that may drive the endpoint are our own.
+ */
+function originAllowed(req: Request) {
+  const origin = req.headers.get("origin");
+  if (origin === null) return true; // non-browser client (curl, the MCP SDK)
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === BIND_HOST || hostname === "localhost";
+  } catch {
+    return false;
+  }
+}
+
+const sweeper = setInterval(sweepIdleSessions, SESSION_SWEEP_MS);
+// Don't hold the process open for the sweep alone.
+sweeper.unref?.();
+
 const http = Bun.serve({
   port: args.port,
+  hostname: BIND_HOST,
   // SSE streams sit idle between server→client messages; Bun's 10s default
   // would tear them down mid-session (0 disables the timeout).
   idleTimeout: 0,
@@ -226,6 +306,13 @@ const http = Bun.serve({
     const { pathname } = new URL(req.url);
     if (pathname !== MCP_PATH) {
       return jsonRpcError(404, -32000, `no MCP endpoint at ${pathname}`);
+    }
+    if (!originAllowed(req)) {
+      // Log it: a refusal is either someone probing or a legitimate client
+      // being blocked, and both are things you want to see rather than debug
+      // from the client's side of a bare 403.
+      note(`refused cross-origin request from ${req.headers.get("origin")}`);
+      return jsonRpcError(403, -32000, "cross-origin request refused");
     }
     if (
       req.method !== "POST" &&

@@ -63,7 +63,11 @@ async function runBatched(
   }));
 
   process.stderr.write(`[run] submitting batch (${items.length} requests)\n`);
-  const results = await runMessageBatch(requests);
+  const results = await runMessageBatch(requests, {
+    // Print the id even without --debug: an interrupted run is otherwise
+    // unrecoverable, and the batch is billed either way.
+    onCreate: (id) => process.stderr.write(`[run] batch id: ${id}\n`),
+  });
 
   const rows: RunRow[] = [];
   for (const [i, item] of items.entries()) {

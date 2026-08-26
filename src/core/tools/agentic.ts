@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
+import { Debug } from "@/core/debug.ts";
 import {
   type MessageParam,
   type StreamAssistantOptions,
@@ -46,6 +47,15 @@ export const PTC_CODE_EXECUTION_TOOL = {
   name: "code_execution",
 } as const satisfies Anthropic.ToolUnion;
 
+/**
+ * Default ceiling on consecutive `pause_turn` resumes (see
+ * `max_pause_resumes`). Unlike `max_iterations` this defaults to a finite
+ * value: an unbounded pause loop is never a legitimate run.
+ */
+const DEFAULT_MAX_PAUSE_RESUMES = 5;
+
+const dbg = Debug.get();
+
 export type RunAgenticOptions = StreamAssistantOptions & {
   // Cap on API iterations. Each iteration is one assistant response + one
   // round of tool execution (or one `pause_turn` resume). If unset, the loop
@@ -54,6 +64,15 @@ export type RunAgenticOptions = StreamAssistantOptions & {
   // stop_reason="tool_use"/"pause_turn", letting the caller detect that the
   // cap fired).
   max_iterations?: number;
+  /**
+   * Cap on *consecutive* `pause_turn` resumes, applied even when
+   * `max_iterations` is unset. A tool_use round always makes local progress
+   * (a tool runs, a result is pushed); a pause resume makes none — it just
+   * re-sends the conversation — so a server-side loop stuck on `pause_turn`
+   * would otherwise bill an unbounded stream of API calls with nothing to
+   * show for them. Reset whenever a round does anything else.
+   */
+  max_pause_resumes?: number;
   /**
    * Anthropic-hosted tool definitions appended verbatim to the wire `tools`
    * array, next to the client-side `tools` argument. They carry no executor —
@@ -83,6 +102,7 @@ export async function runAgenticTurn(
 ) {
   const {
     max_iterations,
+    max_pause_resumes = DEFAULT_MAX_PAUSE_RESUMES,
     server_tools,
     allowed_callers,
     omit_strict,
@@ -132,6 +152,18 @@ export async function runAgenticTurn(
   ];
   const toolByName = new Map(tools.map((t) => [t.name, t]));
 
+  // The wire projection is where strict / allowed_callers / server_tools
+  // actually land, and all three are invisible in the `[tool]` traces — so
+  // trace the shapes once, before the first round.
+  dbg.json("tool defs", () =>
+    toolDefs.map((t) => ({
+      name: "name" in t ? t.name : undefined,
+      type: "type" in t ? t.type : "custom",
+      strict: "strict" in t ? t.strict : undefined,
+      allowed_callers: "allowed_callers" in t ? t.allowed_callers : undefined,
+    })),
+  );
+
   // Container id for the code-execution sandbox behind programmatic tool
   // calling. The API mints one on the first round that runs code and returns
   // it on every response; echoing it back on later rounds keeps the same
@@ -139,6 +171,7 @@ export async function runAgenticTurn(
   let container: string | undefined;
 
   let iteration = 0;
+  let pauseResumes = 0;
   while (true) {
     iteration++;
     const response = await streamAssistantMessage(
@@ -150,7 +183,16 @@ export async function runAgenticTurn(
       },
       hooks.onStream,
     );
+    const priorContainer = container;
     container = response.container?.id ?? container;
+    // Container identity is the whole point of PTC's REPL persistence, and
+    // nothing else surfaces it — trace when one is minted or swapped.
+    if (container !== priorContainer) {
+      dbg.log(
+        () =>
+          `container ${priorContainer === undefined ? "minted" : "changed"}: ${container}`,
+      );
+    }
 
     const toolUseBlocks = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
@@ -177,7 +219,21 @@ export async function runAgenticTurn(
       // message still carries stop_reason="tool_use"/"pause_turn".
       return response;
     }
-    if (response.stop_reason === "pause_turn") continue;
+    if (response.stop_reason === "pause_turn") {
+      // A resume makes no local progress, so a pathological pause loop would
+      // bill an unbounded stream of API calls. Bail with the paused message,
+      // which the caller already treats as "the turn didn't finish".
+      if (++pauseResumes > max_pause_resumes) {
+        dbg.log(
+          () =>
+            `pause_turn cap reached (${max_pause_resumes} consecutive resumes); returning paused message`,
+        );
+        return response;
+      }
+      dbg.log(() => `pause_turn resume ${pauseResumes}/${max_pause_resumes}`);
+      continue;
+    }
+    pauseResumes = 0;
 
     // Phase 1: serial approval pass. Approval prompts (y/N readline) cannot
     // interleave concurrently, so they happen before any tool runs.

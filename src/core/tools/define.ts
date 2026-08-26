@@ -22,10 +22,15 @@ type BetaZodToolParams<S extends z.ZodType> = Parameters<
 // never ship a strict tool the API would 400 on.
 export function defineTool<S extends z.ZodType>(spec: BetaZodToolParams<S>) {
   const tool = betaZodTool(spec) as unknown as CustomTool;
+  const input_schema = withClosedProperties(tool.input_schema);
   return {
     ...tool,
-    strict: true,
-    input_schema: withClosedProperties(tool.input_schema),
+    // Strict requires *both* halves of the contract. `additionalProperties`
+    // is normalized above; `required` can't be — a schema with optional
+    // fields legitimately omits them, and marking that strict 400s at the
+    // first call. Fail here instead, where the tool is defined.
+    ...(isStrictable(input_schema) ? { strict: true } : {}),
+    input_schema,
   } satisfies CustomTool;
 }
 
@@ -34,4 +39,18 @@ function withClosedProperties(schema: CustomTool["input_schema"]) {
     return schema;
   }
   return { ...schema, additionalProperties: false };
+}
+
+/**
+ * Strict tool use requires a closed object schema whose properties are all
+ * required. A schema that doesn't qualify ships non-strict rather than
+ * shipping a request the API rejects.
+ */
+function isStrictable(schema: CustomTool["input_schema"]) {
+  if (schema.type !== "object" || schema.additionalProperties !== false) {
+    return false;
+  }
+  const properties = Object.keys(schema.properties ?? {});
+  const required = new Set(schema.required ?? []);
+  return properties.every((name) => required.has(name));
 }
