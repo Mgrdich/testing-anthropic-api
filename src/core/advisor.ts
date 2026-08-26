@@ -10,6 +10,7 @@ import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_MODEL,
 } from "@/core/constants.ts";
+import { Debug } from "@/core/debug.ts";
 import type { MessageParam, StreamAssistantOptions } from "@/core/messages.ts";
 
 /** Beta header the advisor tool ships behind. */
@@ -71,6 +72,15 @@ export async function streamAdvisorMessage(
     tools: [advisor],
     betas: [ADVISOR_BETA],
   } as unknown as BetaMessageStreamParams;
+
+  // The executor↔advisor pairing is validated server-side and a bad pair is a
+  // flat 400, so trace both models and the beta before sending — otherwise the
+  // error names neither.
+  Debug.get().json("advisor request", {
+    executor: apiOpts.model ?? DEFAULT_MODEL,
+    advisor: advisor.model,
+    beta: ADVISOR_BETA,
+  });
 
   const stream = AnthropicClient.get().beta.messages.stream(body);
   onStream?.(stream);

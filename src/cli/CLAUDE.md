@@ -85,8 +85,10 @@ Per turn, in order:
    `--runner sdk` → `runAgenticTurnSdk`, else `runAgenticTurn`. Always
    streams; ignores `--prefill`. With `--ptc` it also passes the PTC
    options (below). A returned `stop_reason` of `"tool_use"` or
-   `"pause_turn"` means the `--max-iterations` cap fired — warn on
-   stderr.
+   `"pause_turn"` means a cap fired — warn on stderr, naming
+   `--max-iterations` when it was set and the runner's always-on
+   consecutive-`pause_turn` ceiling otherwise (see
+   `src/core/tools/CLAUDE.md`).
 4. **Advisor branch** — taken when `--advisor` is set (parse-time
    exclusive with `--tools`/`--mcp`/`--memory`, so it never competes
    with the tools branch). Calls `streamAdvisorMessage` with
@@ -117,8 +119,13 @@ agentic runners.
 
 ### `--thinking`
 
-Sends `thinking: { type: "adaptive" }` (GA on claude-sonnet-4-6; the
-`budget_tokens` form is deprecated there and unused here). Rendering
+Sends `thinking: { type: "adaptive", display: "summarized" }` (GA on
+claude-sonnet-4-6; the `budget_tokens` form is deprecated there and unused
+here). **`display` is explicit on purpose:** it defaults to `"summarized"`
+on sonnet-4-6 but to `"omitted"` on 4.7-and-later models, where the
+thinking blocks still arrive with *empty text* — so under `--model
+claude-opus-5` the renderer would print a `[thinking]` prefix and nothing
+after it, looking like a broken flag. Rendering
 lives in `hooks.ts` and is shared by both stream-listener sites — the
 single-shot `--stream` path in `repl.ts` and `buildAgenticHooks`'
 `onStream` — so thinking looks the same everywhere:

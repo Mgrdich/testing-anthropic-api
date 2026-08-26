@@ -14,13 +14,18 @@ import from the barrel, not deep paths.
   streaming turn with the **server-side advisor tool** enabled (see
   below). Lives outside `tools/` on purpose: the API runs the advisor
   sub-inference itself, so there is no client-side tool loop.
-- `batches.ts` — `runMessageBatch(requests, {pollMs?})`: Message Batches
-  API wrapper. Creates the batch, polls `retrieve` until
+- `batches.ts` — `runMessageBatch(requests, {pollMs?, maxWaitMs?, onCreate?})`:
+  Message Batches API wrapper. Creates the batch, polls `retrieve` until
   `processing_status === "ended"` (polling is Debug-traced; default
   interval 5s), then streams `.results()` into a `Map` keyed by
   `custom_id` — results arrive in arbitrary order, so callers must
   reassemble by key, never by position. Batched requests cost 50% of
-  standard prices. `BatchRequest` / `BatchResult` (both SDK-derived) are
+  standard prices. Two guards on the wait, because a batch outlives the
+  process that submitted it: `onCreate(batchId)` fires before the first
+  poll so the caller can surface the id **unconditionally** (an
+  interrupted run is otherwise unrecoverable, and billed anyway), and
+  `maxWaitMs` (default 1h) throws with that id rather than polling
+  forever. `BatchRequest` / `BatchResult` (both SDK-derived) are
   exported alongside. Consumed by `eval run --batch`.
 - `client.ts` — `AnthropicClient`, the lazy SDK-client singleton.
 - `constants.ts` — `DEFAULT_MODEL` (`claude-sonnet-4-6`),
@@ -89,6 +94,10 @@ type StreamAdvisorOptions = StreamAssistantOptions & { advisor_model?: string }
 type AdvisorStream = BetaMessageStream<unknown>
 const ADVISOR_BETA = "advisor-tool-2026-03-01"
 ```
+
+Traces `[debug] advisor request` (`{executor, advisor, beta}`) before
+sending: the pairing is validated server-side and an invalid one is a flat
+400 that names neither model.
 
 One `client.beta.messages.stream()` call with
 `betas: [ADVISOR_BETA]` and

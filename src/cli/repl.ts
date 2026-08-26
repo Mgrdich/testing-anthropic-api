@@ -120,7 +120,17 @@ export async function sendTurn(opts: TurnOpts) {
     stop_sequences: opts.args.stopSequences,
     // Both flow through the Partial<…> option types to every path — the
     // single-shot primitives and both agentic runners — with no core changes.
-    ...(opts.args.thinking ? { thinking: { type: "adaptive" as const } } : {}),
+    // `display` is explicit because it defaults to "omitted" on 4.7+ models:
+    // the blocks still arrive, but with empty text, so the [thinking] renderer
+    // would print a prefix and nothing else.
+    ...(opts.args.thinking
+      ? {
+          thinking: {
+            type: "adaptive" as const,
+            display: "summarized" as const,
+          },
+        }
+      : {}),
     ...(opts.args.cache
       ? // Top-level auto-cache: the API places the breakpoint on the last
         // cacheable block. Simpler than manual 4-breakpoint management and
@@ -193,11 +203,17 @@ export async function sendTurn(opts: TurnOpts) {
       finalResponse.stop_reason === "tool_use" ||
       finalResponse.stop_reason === "pause_turn"
     ) {
-      // Both are resumable stop reasons, so the loop returns them only when
-      // the max_iterations cap fires — the model still had work to do
-      // (another tool round, or resuming a paused code-execution turn).
+      // Both are resumable stop reasons, so the loop returns them only when a
+      // cap fired — the model still had work to do (another tool round, or
+      // resuming a paused code-execution turn). Which cap depends: a paused
+      // turn can also hit the runner's own consecutive-pause ceiling, which
+      // applies even without --max-iterations.
+      const cap =
+        opts.args.maxIterations === undefined
+          ? "consecutive pause_turn cap"
+          : `--max-iterations cap (${opts.args.maxIterations})`;
       process.stderr.write(
-        `warning: --max-iterations cap (${opts.args.maxIterations}) reached; turn was not finished (stop_reason: ${finalResponse.stop_reason})\n`,
+        `warning: ${cap} reached; turn was not finished (stop_reason: ${finalResponse.stop_reason})\n`,
       );
     }
     return;

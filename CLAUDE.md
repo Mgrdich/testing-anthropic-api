@@ -195,7 +195,14 @@ loaded, `sendTurn` calls the existing single-shot primitives unchanged.
 With `--debug`, the agentic loop emits framed `[debug] agentic round`,
 `[debug] tool call`, and `[debug] tool result` payloads to stderr in
 addition to the existing `stream event` frames (which include
-`input_json_delta` for tool inputs as they're built up).
+`input_json_delta` for tool inputs as they're built up). Three more
+frames cover what the `[tool]` traces can't show, because it happens at
+the wire boundary rather than per call: `[debug] tool defs` (the
+projected `{name, type, strict, allowed_callers}` per tool, emitted once
+before the first round — the only place `strict` and the PTC
+`allowed_callers` stamp are visible), `[debug] container minted/changed`
+(PTC container-id threading), and `[debug] pause_turn resume n/N` plus
+the cap message when the consecutive-pause ceiling fires.
 
 ### MCP (`src/mcp/`)
 

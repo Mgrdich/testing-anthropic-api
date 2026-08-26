@@ -36,9 +36,13 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-/** Fallback docs dir when no roots-capable client advertised one. */
+/**
+ * Fallback docs dir when no roots-capable client advertised one. Via
+ * `fileURLToPath`, not `URL.pathname` — the latter stays percent-encoded, so a
+ * checkout under a path with a space would resolve to the wrong directory.
+ */
 const FALLBACK_DOCS_DIR = resolve(
-  new URL("../../../docs", import.meta.url).pathname,
+  fileURLToPath(new URL("../../../docs", import.meta.url)),
 );
 
 function mimeFor(path: string) {
