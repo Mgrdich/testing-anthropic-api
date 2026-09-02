@@ -6,15 +6,16 @@ import { defineTool } from "@/core/tools/define.ts";
 // expression — only arithmetic. Do not relax it without replacing the evaluator.
 const SAFE_EXPRESSION = /^[\d+\-*/().\s]+$/;
 
+/** Raw Zod shape shared with the Agent SDK's `tool()` — see `echo.ts`. */
+export const calculatorShape = {
+  expression: z.string().describe("Arithmetic expression, e.g. '(2 + 3) * 4'"),
+};
+
 export const calculator = defineTool({
   name: "calculator",
   description:
     "Evaluates a simple arithmetic expression containing only digits, decimals, parentheses, and the operators + - * /. Returns the numeric result.",
-  inputSchema: z.object({
-    expression: z
-      .string()
-      .describe("Arithmetic expression, e.g. '(2 + 3) * 4'"),
-  }),
+  inputSchema: z.object(calculatorShape),
   run: ({ expression }) => {
     if (!SAFE_EXPRESSION.test(expression)) {
       throw new Error(
