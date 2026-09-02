@@ -7,6 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 bun install            # install deps
 bun run dev [prompt]   # run from source (TTY → REPL, piped stdin → single-shot)
+bun run agent-sdk [prompt]   # same conversation rebuilt on the Claude Agent SDK
+                             # (@anthropic-ai/claude-agent-sdk): the agentic loop,
+                             # tool dispatch, MCP wiring and history are the SDK's.
+                             # Additive — `dev` keeps every raw-API flag this
+                             # cannot express. See src/agent/CLAUDE.md.
 bun run typecheck      # tsc --noEmit, strict mode
 bun run build          # bundle to dist/index.js (target: bun, minified)
 bun run start [prompt] # run the bundled output
@@ -39,10 +44,11 @@ scoped to `src/**/*.ts`; `noAssignInExpressions` disabled for the idiomatic
 
 ## Architecture
 
-The two core modules under `src/` (the others — `mcp/`, `eval/`, `rag/`,
-`skills/` — have their own docs: `src/mcp/CLAUDE.md`,
-`src/eval/CLAUDE.md`, `src/rag/README.md`, `src/skills/CLAUDE.md`;
-`cli/` and `core/` do too: `src/cli/CLAUDE.md`, `src/core/CLAUDE.md`):
+The two core modules under `src/` (the others — `agent/`, `mcp/`, `eval/`,
+`rag/`, `skills/` — have their own docs: `src/agent/CLAUDE.md`,
+`src/mcp/CLAUDE.md`, `src/eval/CLAUDE.md`, `src/rag/README.md`,
+`src/skills/CLAUDE.md`; `cli/` and `core/` do too: `src/cli/CLAUDE.md`,
+`src/core/CLAUDE.md`):
 
 - **`cli/`** owns terminal concerns: arg parsing (`args.ts`), the readline
   conversation loop (`repl.ts`), piped stdin reading (`stdin.ts`), and the
@@ -77,6 +83,20 @@ a trace (e.g. full vs. truncated tool results in `repl.ts`). Do not thread
 `debug` booleans through function signatures or option types.
 
 `src/index.ts` is a 3-line entry that calls `runCli()`.
+
+- **`agent/`** is a *second* conversational CLI (`bun run agent-sdk`) built on
+  the **Claude Agent SDK** (`@anthropic-ai/claude-agent-sdk`) rather than the
+  raw Anthropic SDK. It is additive: `cli/`, `core/`, `mcp/`, `eval/`, `rag/`
+  and `skills/` are unchanged and `bun run dev` keeps every feature. The point
+  of the module is to show how much of the hand-rolled machinery Anthropic's
+  own harness replaces — `runAgenticTurn`, `runAgenticTurnSdk`, the two-phase
+  tool dispatch, the `pause_turn` ceiling, the duplicate-name guard, and all
+  of `mcp/client/`'s connection plumbing collapse into one `query()` call with
+  options — and, just as importantly, what it *cannot* express: `--prefill`,
+  `--stop`, `--temperature`, `--max-tokens`, explicit `cache_control`
+  placement, `--advisor`, `--ptc`, Message Batches, and MCP **sampling** all
+  have no Agent SDK surface, so those stay on `bun run dev`. The full
+  port/lost table is in `src/agent/CLAUDE.md`.
 
 Dual execution mode lives in `cli/index.ts`:
 

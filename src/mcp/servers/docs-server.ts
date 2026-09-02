@@ -84,8 +84,24 @@ export function buildDocsServer() {
           return FALLBACK_DOCS_DIR;
         }
         const { roots } = await server.server.listRoots();
-        const fileRoot = roots.find((r) => r.uri.startsWith("file://"));
-        return fileRoot ? fileURLToPath(fileRoot.uri) : FALLBACK_DOCS_DIR;
+        // Match on the root's NAME, not merely on it being a file:// URI.
+        // The contract is "root === the docs dir itself", which only a client
+        // that knows this server can honor (ours names it "docs" — see
+        // `client/roots.ts`). A general-purpose roots-capable client answers
+        // with its own *workspace* root instead: the Claude Agent SDK returns
+        // the cwd, and serving that verbatim would walk the entire repo,
+        // .git and node_modules included. Prefer the fallback over a root
+        // that was never meant to be a docs dir.
+        const docsRoot = roots.find(
+          (r) => r.name === "docs" && r.uri.startsWith("file://"),
+        );
+        if (docsRoot) return fileURLToPath(docsRoot.uri);
+        process.stderr.write(
+          `docs-server: no root named "docs" advertised (got ${
+            roots.map((r) => r.name ?? r.uri).join(", ") || "none"
+          }); using fallback ${FALLBACK_DOCS_DIR}\n`,
+        );
+        return FALLBACK_DOCS_DIR;
       } catch (err) {
         process.stderr.write(
           `docs-server: roots/list failed, using fallback (${err instanceof Error ? err.message : String(err)})\n`,

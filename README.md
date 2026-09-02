@@ -7,6 +7,15 @@ slice of the API surface: `bun run eval` (prompt evaluation), `bun run rag`
 (chunking + hybrid retrieval + cited answers), `bun run mcp` (Model Context
 Protocol client/servers), and `bun run skills` (Agent Skills + Files API).
 
+There is also a second chat CLI, `bun run agent-sdk`, which rebuilds the same
+conversation on Anthropic's **Claude Agent SDK** — the agentic loop, tool
+dispatch, MCP connections and history are the SDK's rather than hand-rolled.
+It is additive: `bun run dev` is unchanged and keeps the request-shaping flags
+the Agent SDK cannot express (`--prefill`, `--stop`, `--temperature`,
+`--max-tokens`, `--advisor`, `--ptc`, cache-breakpoint placement, MCP
+sampling). See [the Agent SDK CLI](#the-agent-sdk-cli-bun-run-agent-sdk) below
+for when to use which, and `src/agent/CLAUDE.md` for the full comparison.
+
 ## Setup
 
 ```bash
@@ -103,6 +112,110 @@ echo "summarize: hello world" | bun run dev
 bun run dev --help
 ```
 
+## The Agent SDK CLI (`bun run agent-sdk`)
+
+`bun run dev` drives the raw Messages API and hand-rolls the agentic loop.
+`bun run agent-sdk` is the **same conversation rebuilt on the Claude Agent
+SDK** (`@anthropic-ai/claude-agent-sdk`) — Claude Code packaged as a library.
+`query()` spawns the bundled Claude Code binary as a subprocess and owns the
+loop, tool dispatch, MCP connections, permissions, and conversation history.
+
+**When to reach for which:**
+
+| Use `bun run dev` when you want… | Use `bun run agent-sdk` when you want… |
+|---|---|
+| Request-level control: `--prefill`, `--stop`, `--temperature`, `--max-tokens`, explicit `cache_control` placement | The agentic loop handled for you — no `runAgenticTurn`, no round counting, no tool dispatch |
+| Server-side features: `--advisor`, `--ptc` (programmatic tool calling), Message Batches | Durable sessions: `--resume`, `--continue`, `--fork` |
+| MCP **sampling** (`bun run dev --mcp "research the Eiffel Tower"`) and deterministic `@resource` / `#prompt` handling | MCP servers wired by config alone — no connect/convert/close code |
+| To see how the loop works | To see how little code an agent needs |
+
+Neither replaces the other; the module is additive and `bun run dev` lost
+nothing. The full port/lost table lives in `src/agent/CLAUDE.md`.
+
+```bash
+# interactive REPL (empty line, 'exit', or Ctrl+D to quit)
+bun run agent-sdk
+
+# kick off with an opening prompt
+bun run agent-sdk "explain MCP in one sentence"
+
+# single-shot via stdin pipe
+echo "say hello" | bun run agent-sdk
+
+# our four demo tools, exposed to the model as an in-process MCP server
+# (the model sees them as mcp__builtins__calculator, etc.)
+bun run agent-sdk --tools "what is (2+3)*4?"
+
+# a subset
+bun run agent-sdk --tools calculator,get_time "what time is it?"
+
+# memory tool — same ./memories backend and containment checks as
+# `bun run dev --memory`, under a hand-written schema
+bun run agent-sdk --memory "remember that I prefer TypeScript"
+
+# MCP over stdio — the SDK spawns, handshakes, converts, and closes
+bun run agent-sdk --mcp docs "list the available docs"
+
+# ...or an already-running StreamableHTTP server
+bun run mcp:http-server &
+bun run agent-sdk --mcp-url http://localhost:3100/mcp "list the docs"
+
+# adaptive thinking to stderr; stdout stays answer-only
+bun run agent-sdk --thinking "how many r's in strawberry?"
+
+# effort is the SDK's depth knob (there is no --max-tokens here)
+bun run agent-sdk --effort low "quick question: what is 2+2?"
+
+# per-turn cache + cost accounting from the result's modelUsage
+bun run agent-sdk --cache --tools "what time is it?"
+
+# runaway guards (maxTurns counts conversation turns, NOT tool rounds)
+bun run agent-sdk --max-turns 5 --max-budget-usd 0.50 "..."
+
+# sessions: resume by id, continue the latest in this directory, or fork
+bun run agent-sdk --continue "and what about the second one?"
+bun run agent-sdk --resume <session-id> --fork "try a different approach"
+bun run agent-sdk --no-persist "don't write this to ~/.claude/projects"
+
+# also expose Claude Code's own tools (Read/Write/Edit/Bash/Glob/Grep).
+# Off by default so this stays a demo of *our* tools, not a coding agent.
+bun run agent-sdk --builtins --claude-code-prompt "what's in src/agent?"
+
+# debug: our Debug frames + the SDK subprocess's stderr
+bun run agent-sdk --tools --debug "..."
+bun run agent-sdk --sdk-debug "..."   # also the SDK's own verbose logging
+
+# help (includes the full "not supported here" list)
+bun run agent-sdk --help
+```
+
+### In the REPL
+
+`/model <id>` switches model mid-session, and **Ctrl+C interrupts the current
+turn** rather than killing the process (on `bun run dev` it exits).
+
+### Flags that are deliberately rejected
+
+These are raw Messages API capabilities with no Agent SDK surface. The parser
+**errors by name** rather than accepting and silently ignoring them, and points
+you back at `bun run dev`:
+
+```
+--prefill  --stop  --temperature  --max-tokens  --advisor  --ptc  --runner  --stream
+```
+
+`--cache` survives here as **observability only** — breakpoint placement is the
+SDK's business, but the per-turn line still reports cache reads/writes and cost.
+
+### Two degradations worth knowing
+
+- **MCP sampling is unavailable.** The SDK answers `roots` and elicitation but
+  not `sampling/createMessage`, so `research-server.ts` always falls back to its
+  raw Wikipedia extract. Run the sampling showcase on `bun run dev`.
+- **`@resource` attachment becomes model-driven.** Instead of inlining the
+  resource before the turn, the model decides whether to call
+  `ReadMcpResourceTool`. `#prompts` has no equivalent at all.
+
 ## Build a standalone bundle
 
 ```bash
@@ -111,6 +224,10 @@ bun run start "hi" # runs the bundled output
 ```
 
 ## Flags
+
+These are `bun run dev` flags. The Agent SDK CLI has a different, smaller set —
+see [The Agent SDK CLI](#the-agent-sdk-cli-bun-run-agent-sdk) or
+`bun run agent-sdk --help`.
 
 | Flag             | Default             | Description                                          |
 |------------------|---------------------|------------------------------------------------------|
@@ -391,6 +508,18 @@ src/
 │       ├── builtins.ts   # BUILTIN_TOOLS registry + selectTools() + MUTATING_TOOLS
 │       ├── agentic.ts    # runAgenticTurn (local loop; PTC container + pause_turn)
 │       └── agentic_sdk.ts # runAgenticTurnSdk (client.beta.messages.toolRunner)
+├── agent/            # the same chat CLI on the Claude Agent SDK (`bun run agent-sdk`)
+│   ├── main.ts       # thin entry → runAgentCli()
+│   ├── cli.ts        # runAgentCli(): args, session, initial turn, REPL
+│   ├── args.ts       # AgentArgs, parseAgentArgs, printAgentHelp + rejected-flag table
+│   ├── session.ts    # buildOptions() + startAgentSession() — the one query() call
+│   ├── inbox.ts      # push-style AsyncGenerator<SDKUserMessage> (streaming input)
+│   ├── render.ts     # SDKMessage → terminal; replaces the whole AgenticHooks surface
+│   ├── approve.ts    # canUseTool y/N gate + the serializing mutex
+│   ├── hooks.ts      # PreToolUse: force-ask mutating tools, block .env reads
+│   ├── mcp.ts        # MCP_SERVERS registry → Options.mcpServers
+│   ├── repl.ts       # readline loop, /model, Ctrl+C interrupts the turn
+│   └── tools/        # builtins.ts (in-process MCP server) + memory.ts
 ├── mcp/              # Model Context Protocol (`bun run mcp`)
 │   ├── servers/      # docs-server, http-docs-server, research-server + registry
 │   ├── client/       # connection (stdio + StreamableHTTP), sampling, roots, tools/prompts/resources
@@ -411,14 +540,22 @@ src/
 ```
 
 Each module carries its own doc: `src/cli/CLAUDE.md`, `src/core/CLAUDE.md`,
-`src/core/tools/CLAUDE.md`, `src/mcp/CLAUDE.md`, `src/eval/CLAUDE.md`,
-`src/skills/CLAUDE.md`, and `src/rag/README.md`.
+`src/core/tools/CLAUDE.md`, `src/agent/CLAUDE.md`, `src/mcp/CLAUDE.md`,
+`src/eval/CLAUDE.md`, `src/skills/CLAUDE.md`, and `src/rag/README.md`.
 
 `cli/` is everything specific to being a terminal program. `core/` is the
 LLM-facing piece — singleton client, message primitives, the tool-use loop
 in `core/tools/`, and the advisor/batches surfaces — reusable by non-CLI
 callers. `mcp/`, `rag/`, `skills/`, and `eval/` are sub-CLIs built on top of
 `core/`, each with its own `bun run` entry point.
+
+`agent/` is the one module that does **not** sit on `core/`'s client: it talks
+to the Claude Agent SDK, which spawns the bundled Claude Code binary and owns
+the loop. It still reuses `core/`'s tool registry, memory backend, `Debug`
+singleton, and the `mcp/servers/` registry — so the two CLIs share their tools
+and servers while differing entirely in how a turn is executed. Note that
+`core/`'s "the `messages` array is the source of truth" invariant does not hold
+there: the transcript lives in the SDK's subprocess and on disk.
 
 ## Notes
 
